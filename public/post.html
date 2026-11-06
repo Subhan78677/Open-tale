@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Open Tale</title>
+  <link rel="icon" href="assets/favicon.png">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="header"></div>
+
+  <section class="section">
+    <div class="container layout">
+      <article class="article" id="article">
+        <p class="empty">Loading…</p>
+      </article>
+
+      <aside class="sidebar" id="sidebar"></aside>
+    </div>
+  </section>
+
+  <script src="js/common.js"></script>
+  <script>
+    initLayout('blog');
+
+    const slug = new URLSearchParams(location.search).get('slug');
+
+    (async () => {
+      if (!slug) throw new Error('No post selected');
+
+      const p = await api('/api/posts/' + encodeURIComponent(slug));
+      document.title = p.title + ' – Open Tale';
+
+      const pageUrl = encodeURIComponent(location.href);
+      const title = encodeURIComponent(p.title);
+
+      $('#article').innerHTML = `
+        <span class="tag">${escapeHTML(p.category)}</span>
+        <h1>${escapeHTML(p.title)}</h1>
+        <div class="meta">
+          ${avatarHTML(p.author_name, p.author_avatar, 36)}
+          <strong>${escapeHTML(p.author_name)}</strong><span>·</span>
+          <span>${formatDate(p.created_at)}</span><span>·</span>
+          <span>${p.read_time} min read</span><span>·</span>
+          <span>${p.views} views</span>
+        </div>
+        <div class="share">
+          <span>Share:</span>
+          <a target="_blank" rel="noopener" href="https://twitter.com/intent/tweet?url=${pageUrl}&text=${title}">X</a>
+          <a target="_blank" rel="noopener" href="https://www.linkedin.com/sharing/share-offsite/?url=${pageUrl}">LinkedIn</a>
+          <a target="_blank" rel="noopener" href="https://www.facebook.com/sharer/sharer.php?u=${pageUrl}">Facebook</a>
+        </div>
+        <div class="article-cover">
+          ${coverHTML(p.cover_image, 'Cover image · 1200 × 675')}
+        </div>
+        <div class="prose">${bodyHTML(p.content)}</div>
+        <div class="owner-actions" id="owner-actions"></div>
+      `;
+
+      // Sidebar: author + related posts
+      $('#sidebar').innerHTML = `
+        <div class="widget author-card">
+          <h4>About the Author</h4>
+          ${avatarHTML(p.author_name, p.author_avatar, 96)}
+          <strong>${escapeHTML(p.author_name)}</strong>
+          <p>${escapeHTML(p.author_bio || 'Writer on Open Tale.')}</p>
+        </div>
+        <div class="widget">
+          <h4>Related Posts</h4>
+          <div id="related"></div>
+        </div>`;
+
+      const related = await api(`/api/posts/${encodeURIComponent(slug)}/related`);
+      $('#related').innerHTML = related.length
+        ? related.map((r) => `
+            <a class="recent-item" href="post.html?slug=${encodeURIComponent(r.slug)}">
+              <div class="recent-thumb">${coverHTML(r.cover_image, '')}</div>
+              <div>
+                <h5>${escapeHTML(r.title)}</h5>
+                <small>${formatDate(r.created_at)}</small>
+              </div>
+            </a>`).join('')
+        : '<p class="hint">No related posts yet.</p>';
+
+      // Delete button for the post's author only
+      const me = await api('/api/auth/me').catch(() => null);
+      if (me && (me.user.id === p.author_id || me.user.role === 'admin')) {
+        $('#owner-actions').innerHTML = `
+          <a class="btn btn-outline" href="write.html?edit=${encodeURIComponent(p.slug)}">Edit post</a>
+          <button class="btn btn-outline" id="delete-btn">Delete post</button>`;
+        $('#delete-btn').onclick = async () => {
+          if (!confirm('Delete this post permanently?')) return;
+          await api('/api/posts/' + p.id, { method: 'DELETE' });
+          location.href = 'blog.html';
+        };
+      }
+    })().catch((err) => {
+      $('#article').innerHTML = `<h1>Post not found</h1><p class="empty">${escapeHTML(err.message)}</p>
+                                 <p><a class="link" href="blog.html">← Back to blog</a></p>`;
+    });
+  </script>
+</body>
+</html>

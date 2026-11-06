@@ -1,0 +1,19 @@
+{
+  "name": "opentale",
+  "version": "2.0.0",
+  "description": "Open Tale - blog platform with accounts, email verification, admin panel and moderation",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "better-sqlite3": "^11.0.0",
+    "cookie-parser": "^1.4.6",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^2.0.0",
+    "nodemailer": "^6.9.14"
+  }
+}

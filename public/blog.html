@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Blog – Open Tale</title>
+  <link rel="icon" href="assets/favicon.png">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="header"></div>
+
+  <!-- BANNER -->
+  <section class="page-banner">
+    <div class="banner-bg">
+      <!-- BANNER IMAGE (1920 × 400). Replace with <img src="assets/banner.jpg" alt=""> -->
+      <img src="assets/banner.jpg" alt="Open book with coffee and a plant">
+    </div>
+    <div class="banner-text">
+      <h1 id="page-title">Blog</h1>
+      <p>Ideas, stories, inspiration.</p>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container layout">
+
+      <!-- MAIN LIST -->
+      <div>
+        <div class="toolbar"><span id="count"></span></div>
+        <div class="grid" id="post-grid"></div>
+        <div class="pagination" id="pagination"></div>
+      </div>
+
+      <!-- SIDEBAR -->
+      <aside class="sidebar">
+        <div class="widget">
+          <h4>Search</h4>
+          <form class="search-box" id="side-search">
+            <input id="side-q" placeholder="Search articles...">
+            <button type="submit">⌕</button>
+          </form>
+        </div>
+
+        <div class="widget" id="categories">
+          <h4>Categories</h4>
+          <ul class="cat-list" id="cat-list"></ul>
+        </div>
+
+        <div class="widget">
+          <h4>Tags</h4>
+          <div class="tag-cloud" id="tag-cloud"></div>
+        </div>
+
+        <div class="widget">
+          <h4>Recent Posts</h4>
+          <div id="recent"></div>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <script src="js/common.js"></script>
+  <script>
+    initLayout('blog');
+
+    const params = new URLSearchParams(location.search);
+    const state = {
+      category: params.get('category') || '',
+      q: params.get('q') || '',
+      page: 1,
+    };
+    const LIMIT = 6;
+
+    async function loadPosts() {
+      const qs = new URLSearchParams({ page: state.page, limit: LIMIT });
+      if (state.category) qs.set('category', state.category);
+      if (state.q) qs.set('q', state.q);
+
+      const data = await api('/api/posts?' + qs);
+      $('#post-grid').innerHTML = data.posts.length ? data.posts.map(postCardHTML).join('') : emptyState('No posts found.');
+      $('#count').textContent = `${data.total} article${data.total === 1 ? '' : 's'}`;
+
+      $('#pagination').innerHTML = data.pages > 1
+        ? Array.from({ length: data.pages }, (_, i) => i + 1)
+            .map((n) => `<button class="page-btn ${n === data.page ? 'active' : ''}" data-p="${n}">${n}</button>`)
+            .join('')
+        : '';
+      $$('#pagination button').forEach((b) => {
+        b.onclick = () => { state.page = +b.dataset.p; loadPosts(); window.scrollTo({ top: 0, behavior: 'smooth' }); };
+      });
+    }
+
+    async function loadSidebar() {
+      // Categories
+      const cats = await api('/api/categories');
+      const total = cats.reduce((s, c) => s + c.count, 0);
+      $('#cat-list').innerHTML = [{ name: '', count: total }, ...cats]
+        .map((c) => `<li data-cat="${escapeHTML(c.name)}" class="${c.name === state.category ? 'active' : ''}">
+                       ${escapeHTML(c.name || 'All')} <span>${c.count}</span></li>`)
+        .join('');
+      $$('#cat-list li').forEach((li) => {
+        li.onclick = () => {
+          state.category = li.dataset.cat;
+          state.page = 1;
+          $$('#cat-list li').forEach((x) => x.classList.toggle('active', x === li));
+          $('#page-title').textContent = state.category || 'Blog';
+          loadPosts();
+        };
+      });
+
+      // Tags
+      const tags = await api('/api/tags');
+      $('#tag-cloud').innerHTML = tags.length
+        ? tags.map((t) => `<a class="tag-pill" href="#" data-tag="${escapeHTML(t.name)}">#${escapeHTML(t.name)}</a>`).join('')
+        : '<span class="hint">No tags yet.</span>';
+      $$('#tag-cloud a').forEach((a) => {
+        a.onclick = (e) => {
+          e.preventDefault();
+          state.q = a.dataset.tag;
+          state.page = 1;
+          $('#side-q').value = state.q;
+          loadPosts();
+        };
+      });
+
+      // Recent posts
+      const recent = await api('/api/posts?limit=3');
+      $('#recent').innerHTML = recent.posts
+        .map((p) => `
+          <a class="recent-item" href="post.html?slug=${encodeURIComponent(p.slug)}">
+            <div class="recent-thumb">${coverHTML(p.cover_image, '')}</div>
+            <div>
+              <h5>${escapeHTML(p.title)}</h5>
+              <small>${formatDate(p.created_at)}</small>
+            </div>
+          </a>`)
+        .join('');
+    }
+
+    $('#side-search').addEventListener('submit', (e) => {
+      e.preventDefault();
+      state.q = $('#side-q').value.trim();
+      state.page = 1;
+      loadPosts();
+    });
+
+    $('#side-q').value = state.q;
+    $('#page-title').textContent = state.category || 'Blog';
+    loadPosts().catch(console.error);
+    loadSidebar().catch(console.error);
+  </script>
+</body>
+</html>

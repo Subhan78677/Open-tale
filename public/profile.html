@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Profile – Open Tale</title>
+  <link rel="icon" href="assets/favicon.png">
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .profile-head { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; margin-bottom: 24px; }
+    .profile-head h1 { font-size: 30px; }
+    .profile-head .btn { margin-left: auto; }
+    .profile-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 28px; }
+    .profile-stat { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); padding: 20px; }
+    .profile-stat strong { display: block; font-size: 30px; }
+    .profile-stat span { color: var(--muted); font-size: 14px; }
+    .my-post { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; padding: 18px; }
+    .my-post h3 { font-size: 18px; margin: 6px 0; }
+    .my-post-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .btn-small { padding: 7px 14px; font-size: 13px; }
+    .btn-danger { background: #b42318; color: #fff; border: 0; }
+    .notice { padding: 10px 14px; border-radius: 10px; margin-bottom: 16px; font-size: 14px; }
+    .notice.ok { background: #e7f8ee; color: #1b7f43; }
+    .notice.bad { background: #fdecec; color: #b42318; }
+    @media (max-width: 600px) {
+      .profile-head .btn { margin-left: 0; }
+      .profile-stats { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div id="header"></div>
+
+  <section class="section">
+    <div class="container narrow">
+      <div id="notice" class="notice" hidden></div>
+
+      <div class="form-card profile-head">
+        <div id="avatar"></div>
+        <div>
+          <p class="eyebrow">My profile</p>
+          <h1 id="name"></h1>
+          <p class="hint" id="email"></p>
+          <p class="hint" id="joined"></p>
+        </div>
+        <a class="btn btn-primary" href="write.html">Write a Post</a>
+      </div>
+
+      <div class="profile-stats">
+        <div class="profile-stat"><strong id="post-count">0</strong><span>Posts published</span></div>
+        <div class="profile-stat"><strong id="total-views">0</strong><span>Total views on your posts</span></div>
+      </div>
+
+      <h2 style="margin-bottom:14px">My posts</h2>
+      <div id="my-posts"></div>
+    </div>
+  </section>
+
+  <script src="js/common.js"></script>
+  <script>
+    initLayout('profile');
+
+    function notice(msg, ok = true) {
+      const n = $('#notice');
+      n.textContent = msg;
+      n.className = 'notice ' + (ok ? 'ok' : 'bad');
+      n.hidden = false;
+      clearTimeout(notice.timer);
+      notice.timer = setTimeout(() => (n.hidden = true), 4000);
+    }
+
+    const postRow = (p) => `
+      <article class="my-post form-card">
+        <div>
+          <span class="tag">${escapeHTML(p.category)}</span>
+          <h3><a href="post.html?slug=${encodeURIComponent(p.slug)}">${escapeHTML(p.title)}</a></h3>
+          <div class="meta"><span>${formatDate(p.created_at)}</span><span>·</span><span>${p.views} views</span></div>
+        </div>
+        <div class="my-post-actions">
+          <a class="btn btn-outline btn-small" href="write.html?edit=${encodeURIComponent(p.slug)}">Edit</a>
+          <button class="btn btn-danger btn-small" data-del="${p.id}">Delete</button>
+        </div>
+      </article>`;
+
+    async function load() {
+      let data;
+      try {
+        data = await api('/api/profile');
+      } catch (_) {
+        location.href = 'login.html?next=profile.html';
+        return;
+      }
+      const u = data.user;
+      document.title = u.name + ' – Open Tale';
+      $('#avatar').innerHTML = avatarHTML(u.name, u.avatar, 96);
+      $('#name').textContent = u.name;
+      $('#email').textContent = u.email;
+      $('#joined').textContent = 'Member since ' + formatDate(data.joined);
+      $('#post-count').textContent = data.post_count;
+      $('#total-views').textContent = data.total_views.toLocaleString();
+      $('#my-posts').innerHTML = data.posts.length
+        ? data.posts.map(postRow).join('')
+        : `<div class="form-card"><p class="empty">You have not published any posts yet.
+             <a class="link" href="write.html">Write your first post</a></p></div>`;
+    }
+
+    // Delete one of your own posts
+    document.addEventListener('click', async (e) => {
+      const btn = e.target.closest('button[data-del]');
+      if (!btn) return;
+      if (!confirm('Delete this post permanently?')) return;
+      try {
+        await api(`/api/posts/${btn.dataset.del}`, { method: 'DELETE' });
+        notice('Post deleted');
+        load();
+      } catch (ex) {
+        notice(ex.message, false);
+      }
+    });
+
+    load().catch((ex) => notice(ex.message, false));
+  </script>
+</body>
+</html>

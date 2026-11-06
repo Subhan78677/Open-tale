@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Dashboard – Open Tale</title>
+  <link rel="icon" href="assets/favicon.png">
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    body { background: #f1f3f8; }
+    .site-footer { display: none; }
+
+    /* ----- Layout: sidebar + main ----- */
+    .admin-app { display: grid; grid-template-columns: 240px minmax(0, 1fr); min-height: 100vh; }
+    .admin-sidebar {
+      background: var(--dark); color: #c9cde0; padding: 22px 14px;
+      display: flex; flex-direction: column; gap: 6px;
+      position: sticky; top: 0; height: 100vh;
+    }
+    .admin-brand { display: block; padding: 0 8px 18px; }
+    .admin-brand img { height: 40px; width: auto; }
+    .admin-section-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; color: #6f7690; padding: 16px 10px 6px; }
+    .admin-nav button, .admin-sidebar .admin-link, .admin-logout {
+      display: block; width: 100%; text-align: left; background: none; border: 0; cursor: pointer;
+      color: #c9cde0; padding: 11px 14px; border-radius: 10px; font: inherit; font-weight: 600; font-size: 15px;
+    }
+    .admin-nav button:hover, .admin-sidebar .admin-link:hover, .admin-logout:hover { background: var(--dark-2); color: #fff; }
+    .admin-nav button.active { background: var(--dark-2); color: #fff; box-shadow: inset 3px 0 0 var(--purple); }
+    .admin-logout { margin-top: auto; }
+
+    .admin-main { min-width: 0; }
+    .admin-topbar {
+      display: flex; align-items: center; gap: 16px; background: #fff;
+      padding: 14px 24px; border-bottom: 1px solid #e6e9f2;
+      position: sticky; top: 0; z-index: 5;
+    }
+    .admin-search { flex: 1; max-width: 560px; position: relative; }
+    .admin-search input {
+      width: 100%; padding: 11px 16px 11px 42px; border-radius: 999px;
+      border: 1px solid #d6d9e3; background: #f7f8fb; font: inherit; outline: none;
+    }
+    .admin-search input:focus { border-color: var(--purple); background: #fff; }
+    .admin-search::before { content: '⌕'; position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 18px; }
+    .admin-me { margin-left: auto; display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 14px; }
+    .admin-content { padding: 24px; }
+    .admin-content > section[data-view] { animation: fade 0.2s ease; }
+    @keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+    /* ----- Cards ----- */
+    .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+    .stat { background: #fff; border-radius: 14px; padding: 18px; box-shadow: var(--shadow); display: flex; gap: 14px; align-items: center; }
+    .stat-icon { width: 46px; height: 46px; border-radius: 12px; display: grid; place-items: center; color: #fff; font-weight: 700; flex: none; background: var(--grad); }
+    .stat-icon.pink { background: linear-gradient(90deg, #ff6b8a, #ff3d6e); }
+    .stat-icon.green { background: linear-gradient(90deg, #34d399, #10b981); }
+    .stat-icon.amber { background: linear-gradient(90deg, #fbbf24, #f59e0b); }
+    .stat span { font-size: 13px; color: var(--muted); display: block; }
+    .stat strong { font-size: 26px; }
+
+    .card { background: #fff; border-radius: 14px; padding: 20px; box-shadow: var(--shadow); margin-top: 20px; }
+    .card-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+    .card-head h3 { font-size: 18px; }
+
+    /* ----- Tables ----- */
+    .table-wrap { overflow-x: auto; }
+    table.admin { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 760px; }
+    table.admin th, table.admin td { text-align: left; padding: 12px 10px; border-bottom: 1px solid #eef0f5; vertical-align: middle; }
+    table.admin th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
+    table.admin td small { color: var(--muted); }
+    .actions { white-space: nowrap; }
+    .actions .btn { margin: 2px; }
+
+    .badge { padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+    .badge.ok { background: #e7f8ee; color: #1b7f43; }
+    .badge.bad { background: #fdecec; color: #b42318; }
+    .badge.info { background: #eef4ff; color: #2a4fa0; }
+
+    .btn-small { padding: 6px 12px; font-size: 13px; }
+    .btn-danger { background: #b42318; color: #fff; border: 0; }
+    .btn-danger:hover { filter: brightness(1.1); }
+
+    .notice { padding: 10px 14px; border-radius: 10px; margin-bottom: 16px; font-size: 14px; }
+    .notice.ok { background: #e7f8ee; color: #1b7f43; }
+    .notice.bad { background: #fdecec; color: #b42318; }
+
+    .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; max-width: 640px; }
+
+    /* ----- Responsive ----- */
+    @media (max-width: 1100px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    @media (max-width: 900px) {
+      .admin-app { grid-template-columns: 1fr; }
+      .admin-sidebar { position: static; height: auto; flex-direction: row; flex-wrap: wrap; align-items: center; padding: 14px; }
+      .admin-brand { padding: 0 8px 0 0; }
+      .admin-section-label { display: none; }
+      .admin-nav { display: flex; gap: 4px; flex-wrap: wrap; }
+      .admin-nav button { width: auto; padding: 9px 12px; }
+      .admin-sidebar .admin-link { width: auto; padding: 9px 12px; }
+      .admin-logout { width: auto; margin-top: 0; margin-left: auto; padding: 9px 12px; }
+      .admin-topbar { position: static; padding: 12px 16px; flex-wrap: wrap; }
+      .admin-search { order: 3; max-width: none; flex-basis: 100%; }
+      .admin-content { padding: 16px; }
+    }
+    @media (max-width: 520px) {
+      .stats, .settings-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="admin-app">
+
+    <!-- SIDEBAR -->
+    <aside class="admin-sidebar">
+      <a href="index.html" class="admin-brand"><img src="assets/logo.png" alt="Open Tale"></a>
+
+      <nav class="admin-nav">
+        <button class="active" data-view="dashboard" type="button">Dashboard</button>
+        <button data-view="users" type="button">Users</button>
+        <button data-view="posts" type="button">Posts</button>
+        <button data-view="settings" type="button">Admin Settings</button>
+      </nav>
+
+      <div class="admin-section-label">Quick links</div>
+      <a href="blog.html" class="admin-link">View website</a>
+      <a href="profile.html" class="admin-link">My profile</a>
+
+      <button class="admin-logout" id="logout-btn" type="button">Logout</button>
+    </aside>
+
+    <!-- MAIN -->
+    <main class="admin-main">
+      <header class="admin-topbar">
+        <form class="admin-search" id="search-form" role="search" onsubmit="return false">
+          <input id="search" type="search" placeholder="Search users by name or email..." autocomplete="off">
+        </form>
+        <div class="admin-me">
+          <span id="me-name">Admin</span>
+        </div>
+      </header>
+
+      <div class="admin-content">
+        <div id="notice" class="notice" hidden></div>
+
+        <!-- DASHBOARD -->
+        <section data-view="dashboard">
+          <div class="stats">
+            <div class="stat">
+              <div class="stat-icon">U</div>
+              <div><span>Total registered users</span><strong id="stat-users">–</strong></div>
+            </div>
+            <div class="stat">
+              <div class="stat-icon pink">P</div>
+              <div><span>Total posts published</span><strong id="stat-posts">–</strong></div>
+            </div>
+            <div class="stat">
+              <div class="stat-icon green">A</div>
+              <div><span>Active sessions now</span><strong id="stat-active">–</strong></div>
+            </div>
+            <div class="stat">
+              <div class="stat-icon amber">V</div>
+              <div><span>Total post views</span><strong id="stat-views">–</strong></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <h3>Recent blog posts &amp; management</h3>
+              <button class="link" data-view-link="posts" type="button" style="background:none;border:0;cursor:pointer">View all →</button>
+            </div>
+            <div class="table-wrap">
+              <table class="admin">
+                <thead><tr><th>Post title</th><th>Author</th><th>Published</th><th>Views</th><th>Status</th><th>Actions</th></tr></thead>
+                <tbody id="recent-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- USERS -->
+        <section data-view="users" hidden>
+          <div class="card" style="margin-top:0">
+            <div class="card-head">
+              <h3>Registered users</h3>
+              <span class="hint" id="users-count"></span>
+            </div>
+            <div class="table-wrap">
+              <table class="admin">
+                <thead>
+                  <tr><th>Name</th><th>Email</th><th>Posts</th><th>Role</th><th>Verified</th><th>Status</th><th>Joined</th><th>Actions</th></tr>
+                </thead>
+                <tbody id="users-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- POSTS -->
+        <section data-view="posts" hidden>
+          <div class="card" style="margin-top:0">
+            <div class="card-head"><h3>All blog posts</h3></div>
+            <div class="table-wrap">
+              <table class="admin">
+                <thead><tr><th>Post title</th><th>Author</th><th>Published</th><th>Views</th><th>Status</th><th>Actions</th></tr></thead>
+                <tbody id="posts-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- SETTINGS -->
+        <section data-view="settings" hidden>
+          <div class="card" style="margin-top:0">
+            <div class="card-head">
+              <h3>Posting limit for users</h3>
+            </div>
+            <p class="hint" style="margin-bottom:18px">Admins are never limited. Changes apply immediately.</p>
+            <form id="settings-form" class="settings-grid">
+              <div class="field">
+                <label for="post_limit">Posts allowed</label>
+                <input id="post_limit" type="number" min="1" max="100" required>
+              </div>
+              <div class="field">
+                <label for="post_window_hours">Within (hours)</label>
+                <input id="post_window_hours" type="number" min="1" max="720" required>
+              </div>
+              <div style="grid-column:1/-1">
+                <button class="btn btn-primary" type="submit">Save settings</button>
+              </div>
+            </form>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <script src="js/common.js"></script>
+  <script>
+    initLayout('admin');
+
+    let me = null;
+    let searchTimer = null;
+
+    function notice(msg, ok = true) {
+      const n = $('#notice');
+      n.textContent = msg;
+      n.className = 'notice ' + (ok ? 'ok' : 'bad');
+      n.hidden = false;
+      clearTimeout(notice.timer);
+      notice.timer = setTimeout(() => (n.hidden = true), 4000);
+    }
+
+    // ----- Switch between sections -----
+    function showView(name) {
+      $$('.admin-nav button').forEach((b) => b.classList.toggle('active', b.dataset.view === name));
+      $$('section[data-view]').forEach((s) => (s.hidden = s.dataset.view !== name));
+    }
+
+    $$('.admin-nav button').forEach((btn) => {
+      btn.onclick = () => {
+        showView(btn.dataset.view);
+        if (btn.dataset.view === 'users') loadUsers($('#search').value.trim());
+        if (btn.dataset.view === 'settings') loadSettings();
+      };
+    });
+    $('[data-view-link]').onclick = () => showView('posts');
+
+    // ----- Stats -----
+    async function loadStats() {
+      const s = await api('/api/admin/stats');
+      $('#stat-users').textContent = s.totalUsers.toLocaleString();
+      $('#stat-posts').textContent = s.totalPosts.toLocaleString();
+      $('#stat-active').textContent = s.activeNow.toLocaleString();
+      $('#stat-views').textContent = s.totalViews.toLocaleString();
+    }
+
+    // ----- Users (search by name or email) -----
+    const userRow = (u) => `
+      <tr>
+        <td><strong>${escapeHTML(u.name)}</strong></td>
+        <td>${escapeHTML(u.email)}</td>
+        <td><span class="badge info">${u.post_count}</span></td>
+        <td>${u.role === 'admin' ? '<strong>Admin</strong>' : 'User'}</td>
+        <td>${u.email_verified ? 'Yes' : 'No'}</td>
+        <td>${u.banned ? '<span class="badge bad">Banned</span>' : '<span class="badge ok">Active</span>'}</td>
+        <td>${formatDate(u.created_at)}</td>
+        <td class="actions">${u.id === me.id ? '<span class="hint">That is you</span>' : `
+          <button class="btn btn-outline btn-small" data-act="ban" data-id="${u.id}" data-val="${u.banned ? 0 : 1}">${u.banned ? 'Unban' : 'Ban'}</button>
+          <button class="btn btn-outline btn-small" data-act="role" data-id="${u.id}" data-val="${u.role === 'admin' ? 'user' : 'admin'}">${u.role === 'admin' ? 'Remove admin' : 'Make admin'}</button>`}
+        </td>
+      </tr>`;
+
+    async function loadUsers(q = '') {
+      const users = await api('/api/admin/users?q=' + encodeURIComponent(q));
+      $('#users-count').textContent = `${users.length} user${users.length === 1 ? '' : 's'}${q ? ` matching "${q}"` : ''}`;
+      $('#users-body').innerHTML = users.length
+        ? users.map(userRow).join('')
+        : '<tr><td colspan="8" class="hint">No users match your search.</td></tr>';
+    }
+
+    // Typing in the top search box shows the users section and filters it
+    $('#search').addEventListener('input', (e) => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => {
+        showView('users');
+        loadUsers(e.target.value.trim()).catch((ex) => notice(ex.message, false));
+      }, 300);
+    });
+
+    // ----- Posts -----
+    let allPosts = [];
+
+    const postRow = (p) => `
+      <tr>
+        <td><a class="link" href="post.html?slug=${encodeURIComponent(p.slug)}"><strong>${escapeHTML(p.title)}</strong></a></td>
+        <td>${escapeHTML(p.author_name)}<br><small>${escapeHTML(p.author_email)}</small></td>
+        <td>${formatDate(p.created_at)}</td>
+        <td>${p.views}</td>
+        <td><span class="badge ok">Published</span></td>
+        <td class="actions">
+          <a class="btn btn-outline btn-small" href="write.html?edit=${encodeURIComponent(p.slug)}">Edit</a>
+          <button class="btn btn-danger btn-small" data-del="${p.id}">Delete</button>
+        </td>
+      </tr>`;
+
+    async function loadPosts() {
+      allPosts = await api('/api/admin/posts');
+      $('#recent-body').innerHTML = allPosts.slice(0, 5).map(postRow).join('')
+        || '<tr><td colspan="6" class="hint">No posts yet.</td></tr>';
+      $('#posts-body').innerHTML = allPosts.map(postRow).join('')
+        || '<tr><td colspan="6" class="hint">No posts yet.</td></tr>';
+    }
+
+    // ----- Actions: delete any post, ban / unban, change role -----
+    document.addEventListener('click', async (e) => {
+      const del = e.target.closest('button[data-del]');
+      if (del) {
+        if (!confirm('Delete this post permanently?')) return;
+        try {
+          await api(`/api/posts/${del.dataset.del}`, { method: 'DELETE' });
+          notice('Post deleted');
+          await Promise.all([loadPosts(), loadStats()]);
+        } catch (ex) {
+          notice(ex.message, false);
+        }
+        return;
+      }
+
+      const act = e.target.closest('button[data-act]');
+      if (act) {
+        const banning = act.dataset.act === 'ban' && act.dataset.val === '1';
+        if (banning && !confirm('Ban this account? The user will not be able to log in or post.')) return;
+        const body = act.dataset.act === 'ban'
+          ? { banned: act.dataset.val === '1' }
+          : { role: act.dataset.val };
+        try {
+          await api(`/api/admin/users/${act.dataset.id}`, { method: 'PATCH', body });
+          notice('User updated');
+          loadUsers($('#search').value.trim());
+        } catch (ex) {
+          notice(ex.message, false);
+        }
+      }
+    });
+
+    // ----- Settings -----
+    async function loadSettings() {
+      const s = await api('/api/admin/settings');
+      $('#post_limit').value = s.post_limit;
+      $('#post_window_hours').value = s.post_window_hours;
+    }
+
+    $('#settings-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      try {
+        await api('/api/admin/settings', {
+          method: 'PUT',
+          body: { post_limit: $('#post_limit').value, post_window_hours: $('#post_window_hours').value },
+        });
+        notice('Settings saved');
+      } catch (ex) {
+        notice(ex.message, false);
+      }
+    });
+
+    // ----- Logout -----
+    $('#logout-btn').onclick = async () => {
+      await api('/api/auth/logout', { method: 'POST' });
+      location.href = 'login.html';
+    };
+
+    // ----- Start: only admins can open this page -----
+    (async () => {
+      try {
+        me = (await api('/api/auth/me')).user;
+      } catch (_) {
+        location.href = 'login.html?next=admin.html';
+        return;
+      }
+      if (me.role !== 'admin') {
+        location.href = 'index.html';
+        return;
+      }
+      $('#me-name').textContent = me.name;
+      await Promise.all([loadStats(), loadPosts(), loadUsers(), loadSettings()]);
+    })().catch((ex) => notice(ex.message, false));
+  </script>
+</body>
+</html>
