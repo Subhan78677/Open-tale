@@ -58,7 +58,7 @@ function setSetting(key, value) {
 // Creates and emails a 6-digit code (at most one every 60 seconds)
 async function issueCode(email) {
   const last = db.prepare('SELECT sent_at FROM verification_codes WHERE email = ?').get(email);
-  if (last && Date.now() - last.sent_at < 60 * 1000) {
+  if (last && Date.now() - last.sent_at < 60000) {
     fail(429, 'Please wait a minute before requesting another code');
   }
   const code = String(crypto.randomInt(100000, 1000000));
@@ -219,7 +219,6 @@ app.post('/api/auth/login', wrap(async (req, res) => {
   if (user.banned) fail(403, 'Your account has been banned. Please contact the admin.');
 
   if (!user.email_verified) {
-    // Send a fresh code and ask for it (ignore the 1-minute wait if a code was just sent)
     await issueCode(email).catch(() => {});
     fail(403, 'Please verify your email first. Enter the code we sent you.', { needsVerification: true, email });
   }
@@ -240,7 +239,6 @@ app.get('/api/auth/me', requireAuth, (req, res) => {
 // ==========================================================
 // POST ROUTES
 // ==========================================================
-// Shows how many posts the logged-in user can still publish
 app.get('/api/posts/quota', requireAuth, (req, res) => {
   res.json(quotaInfo(req.user));
 });
@@ -294,7 +292,6 @@ app.get('/api/posts/:slug', (req, res) => {
   res.json(post);
 });
 
-// Create a post (multipart form: title, category, excerpt, content, tags, cover)
 app.post('/api/posts', requireAuth, requireVerified, upload.single('cover'), wrap(async (req, res) => {
   const cleanup = () => { if (req.file) fs.unlink(req.file.path, () => {}); };
   const title = (req.body.title || '').trim();
@@ -331,7 +328,6 @@ app.post('/api/posts', requireAuth, requireVerified, upload.single('cover'), wra
   res.status(201).json({ slug });
 }));
 
-// Edit a post: the author or any admin. Same fields as creating a post.
 app.put('/api/posts/:id', requireAuth, requireVerified, upload.single('cover'), wrap(async (req, res) => {
   const cleanup = () => { if (req.file) fs.unlink(req.file.path, () => {}); };
   const post = db.prepare('SELECT * FROM posts WHERE id = ?').get(req.params.id);
@@ -356,7 +352,6 @@ app.put('/api/posts/:id', requireAuth, requireVerified, upload.single('cover'), 
     throw err;
   }
 
-  // Keep the old cover unless a new image was uploaded
   let cover = post.cover_image;
   if (req.file) {
     cover = `/uploads/${req.file.filename}`;
@@ -367,20 +362,18 @@ app.put('/api/posts/:id', requireAuth, requireVerified, upload.single('cover'), 
 
   const readTime = Math.max(1, Math.ceil(content.replace(/<[^>]+>/g, ' ').trim().split(/\s+/).length / 200));
   db.prepare(`UPDATE posts SET title = ?, excerpt = ?, content = ?, category = ?, tags = ?,
-                               cover_image = ?, read_time = ?, updated_at = datetime('now')
+                             cover_image = ?, read_time = ?, updated_at = datetime('now')
               WHERE id = ?`)
     .run(title, excerpt || plainExcerpt(content), content, category, tags, cover, readTime, post.id);
 
   res.json({ slug: post.slug });
 }));
 
-// Image for the rich text editor. Returns the image URL.
 app.post('/api/upload', requireAuth, requireVerified, upload.single('image'), (req, res) => {
   if (!req.file) fail(400, 'No image received');
   res.json({ url: `/uploads/${req.file.filename}` });
 });
 
-// Delete a post: the author or any admin
 app.delete('/api/posts/:id', requireAuth, wrap(async (req, res) => {
   const post = db.prepare('SELECT * FROM posts WHERE id = ?').get(req.params.id);
   if (!post) fail(404, 'Post not found');
@@ -411,7 +404,7 @@ app.get('/api/tags', (req, res) => {
 });
 
 // ==========================================================
-// ADMIN ROUTES (admin only)
+// ADMIN ROUTES
 // ==========================================================
 app.get('/api/admin/users', requireAuth, requireAdmin, (req, res) => {
   const q = `%${String(req.query.q || '').trim()}%`;
@@ -424,7 +417,6 @@ app.get('/api/admin/users', requireAuth, requireAdmin, (req, res) => {
   );
 });
 
-// Ban / unban a user, or make them admin / remove admin
 app.patch('/api/admin/users/:id', requireAuth, requireAdmin, (req, res) => {
   const id = Number(req.params.id);
   const target = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
@@ -447,7 +439,6 @@ app.get('/api/admin/settings', requireAuth, requireAdmin, (req, res) => {
   });
 });
 
-// Change how many posts normal users may publish, and the time window
 app.put('/api/admin/settings', requireAuth, requireAdmin, (req, res) => {
   const limit = parseInt(req.body.post_limit, 10);
   const hours = parseInt(req.body.post_window_hours, 10);
@@ -459,9 +450,8 @@ app.put('/api/admin/settings', requireAuth, requireAdmin, (req, res) => {
 });
 
 // ==========================================================
-// ERRORS
+// PROFILE & STATS
 // ==========================================================
-// ----- Profile: the logged-in user's own account and posts -----
 app.get('/api/profile', requireAuth, (req, res) => {
   const posts = db
     .prepare(`SELECT ${CARD_COLS} FROM posts p WHERE p.author_id = ? ORDER BY p.created_at DESC`)
@@ -475,7 +465,6 @@ app.get('/api/profile', requireAuth, (req, res) => {
   });
 });
 
-// ----- Admin dashboard numbers -----
 app.get('/api/admin/stats', requireAuth, requireAdmin, (req, res) => {
   res.json({
     totalUsers: db.prepare('SELECT COUNT(*) AS n FROM users').get().n,
@@ -485,7 +474,6 @@ app.get('/api/admin/stats', requireAuth, requireAdmin, (req, res) => {
   });
 });
 
-// All posts with author name and email (admin only)
 app.get('/api/admin/posts', requireAuth, requireAdmin, (req, res) => {
   res.json(
     db.prepare(`SELECT ${CARD_COLS}, u.id AS author_id, u.name AS author_name, u.email AS author_email
@@ -508,6 +496,11 @@ app.use((err, req, res, next) => {
   });
 });
 
-app.listen(PORT, () => {
-  console.log(`Open Tale is running at http://localhost:${PORT}`);
-});
+// Vercel compatible export + Local development listener
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Open Tale is running at http://localhost:${PORT}`);
+  });
+}
+
+module.exports = app;
