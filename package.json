@@ -4,7 +4,8 @@
   "description": "Open Tale - blog platform deployed as Vercel serverless functions",
   "private": true,
   "scripts": {
-    "dev": "vercel dev"
+    "dev": "vercel dev",
+    "build": "npm install better-sqlite3"
   },
   "dependencies": {
     "@libsql/client": "^0.14.0",
