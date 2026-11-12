@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Write a Post – Open Tale</title>
+  <link rel="icon" href="assets/favicon.png">
+  <link rel="stylesheet" href="css/style.css">
+  <!-- Rich text editor (needs internet connection) -->
+  <script src="https://cdn.jsdelivr.net/npm/tinymce@6.8.5/tinymce.min.js"></script>
+  <style>
+    .tox-tinymce { max-width: 100% !important; border-radius: 10px !important; }
+    .form-card { overflow: hidden; }
+    .quota { background: #eef4ff; color: #2a4fa0; padding: 10px 14px; border-radius: 10px; margin-bottom: 16px; font-size: 14px; }
+    @media (max-width: 600px) { .form-card { padding: 18px; } }
+  </style>
+</head>
+<body>
+  <div id="header"></div>
+
+  <section class="section">
+    <div class="container narrow">
+      <p class="eyebrow">Share your story</p>
+      <h1 class="page-title">Write a Post</h1>
+      <div id="quota" class="quota" hidden></div>
+
+      <form id="post-form" class="form-card">
+        <div id="form-error" class="alert error" hidden></div>
+
+        <div class="field">
+          <label for="title">Post title</label>
+          <input id="title" name="title" maxlength="140" required placeholder="Enter your post title...">
+        </div>
+
+        <div class="field">
+          <label for="category">Category</label>
+          <select id="category" name="category" required>
+            <option value="">Select category</option>
+            <option>Travel</option>
+            <option>Technology</option>
+            <option>Health &amp; Wellness</option>
+            <option>Lifestyle</option>
+            <option>Food</option>
+            <option>Business</option>
+            <option>Education</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="excerpt">Short summary (optional)</label>
+          <input id="excerpt" name="excerpt" maxlength="200" placeholder="One line shown on post cards">
+        </div>
+
+        <div class="field">
+          <span class="label">Featured image</span>
+          <label class="upload-box" for="cover">
+            <img id="cover-preview" alt="" hidden>
+            <span id="cover-text">Click to upload an image<br><small>1200 × 675 px recommended · JPG, PNG, WEBP · max 5 MB</small></span>
+          </label>
+          <input type="file" id="cover" name="cover" accept="image/jpeg,image/png,image/webp,image/gif" hidden>
+        </div>
+
+        <div class="field">
+          <label for="content">Content</label>
+          <textarea id="content" name="content" placeholder="Start writing your content here..."></textarea>
+        </div>
+
+        <div class="field">
+          <label for="tags">Tags</label>
+          <input id="tags" name="tags" placeholder="Add tags (comma separated) e.g. travel, nature">
+        </div>
+
+        <button class="btn btn-primary" type="submit" id="submit-btn">Publish Post</button>
+      </form>
+    </div>
+  </section>
+
+  <script src="js/common.js"></script>
+  <script>
+    (async () => {
+      initLayout('write');
+
+      const showFormError = (msg) => { $('#form-error').textContent = msg; $('#form-error').hidden = false; };
+
+      // Only logged-in users can write
+      let me;
+      try {
+        me = (await api('/api/auth/me')).user;
+      } catch {
+        location.href = 'login.html?next=write.html';
+        return;
+      }
+
+      // ----- Edit mode: write.html?edit=post-slug -----
+      const editSlug = new URLSearchParams(location.search).get('edit');
+      let editPost = null;
+      if (editSlug) {
+        try {
+          editPost = await api('/api/posts/' + encodeURIComponent(editSlug));
+        } catch (ex) {
+          showFormError(ex.message);
+          return;
+        }
+        if (editPost.author_id !== me.id && me.role !== 'admin') {
+          location.href = 'profile.html';
+          return;
+        }
+        $('.eyebrow').textContent = 'Update your story';
+        $('h1.page-title').textContent = 'Edit Post';
+        $('#submit-btn').textContent = 'Save Changes';
+        $('#title').value = editPost.title;
+        $('#category').value = editPost.category;
+        $('#excerpt').value = editPost.excerpt;
+        $('#tags').value = editPost.tags.split(',').filter(Boolean).join(', ');
+        if (editPost.cover_image) {
+          $('#cover-preview').src = editPost.cover_image;
+          $('#cover-preview').hidden = false;
+          $('#cover-text').textContent = 'Click to replace the image';
+        }
+      }
+
+      // Show how many posts the user can still publish (new posts only)
+      async function showQuota() {
+        const q = await api('/api/posts/quota');
+        const box = $('#quota');
+        if (q.unlimited) {
+          box.textContent = 'Admin account: you can publish without limits.';
+        } else if (q.remaining > 0) {
+          box.textContent = `You can publish ${q.remaining} more post(s) in the next ${q.windowHours} hours (limit: ${q.limit}).`;
+        } else {
+          box.textContent = `You have reached your limit of ${q.limit} posts in ${q.windowHours} hours. You can post again after ${new Date(q.nextAt).toLocaleString()}.`;
+          $('#submit-btn').disabled = true;
+        }
+        box.hidden = false;
+      }
+      if (!editPost) showQuota().catch(console.error);
+
+      // Rich text editor
+      tinymce.init({
+        selector: '#content',
+        width: '100%',
+        height: 420,
+        min_height: 280,
+        branding: false,
+        promotion: false,
+        license_key: 'gpl',
+        menubar: 'file edit insert view format table tools',
+        plugins: 'advlist autolink lists link image charmap preview anchor searchreplace visualblocks code fullscreen insertdatetime media table wordcount emoticons help',
+        toolbar: 'undo redo | blocks | bold italic underline strikethrough | forecolor backcolor | alignleft aligncenter alignright alignjustify | bullist numlist | outdent indent | link image media table emoticons charmap | removeformat | code preview fullscreen',
+        toolbar_mode: 'wrap',
+        content_style: 'body { font-family: Inter, Arial, sans-serif; font-size: 16px; line-height: 1.7; }',
+        // Images inserted in the editor are uploaded to the server
+        images_upload_handler: async (blobInfo) => {
+          const fd = new FormData();
+          fd.append('image', blobInfo.blob(), blobInfo.filename());
+          const res = await api('/api/upload', { method: 'POST', body: fd });
+          return res.url;
+        },
+        setup: (editor) => {
+          editor.on('init', () => {
+            if (editPost) editor.setContent(bodyHTML(editPost.content));
+          });
+        },
+      });
+
+      // Featured image preview
+      $('#cover').onchange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          $('#cover-preview').src = ev.target.result;
+          $('#cover-preview').hidden = false;
+          $('#cover-text').hidden = true;
+        };
+        reader.readAsDataURL(file);
+      };
+
+      // Publish or save changes
+      $('#post-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        $('#form-error').hidden = true;
+
+        const editor = tinymce.get('content');
+        const html = editor ? editor.getContent() : '';
+        const text = editor ? editor.getContent({ format: 'text' }).trim() : '';
+        if (!text) {
+          showFormError('Please write some content before publishing.');
+          return;
+        }
+
+        const btn = $('#submit-btn');
+        btn.disabled = true;
+        btn.textContent = editPost ? 'Saving...' : 'Publishing...';
+
+        try {
+          const fd = new FormData(e.target);
+          fd.set('content', html);
+          const res = editPost
+            ? await api(`/api/posts/${editPost.id}`, { method: 'PUT', body: fd })
+            : await api('/api/posts', { method: 'POST', body: fd });
+          location.href = 'post.html?slug=' + encodeURIComponent(res.slug);
+        } catch (ex) {
+          showFormError(ex.message);
+          btn.disabled = false;
+          btn.textContent = editPost ? 'Save Changes' : 'Publish Post';
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

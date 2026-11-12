@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Open Tale – Discover Ideas That Inspire</title>
+  <link rel="icon" href="assets/favicon.png">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="header"></div>
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="hero-bg">
+      <!-- HERO IMAGE (1920 × 1080). Replace the next line with:
+           <img src="assets/hero.jpg" alt=""> -->
+      <img src="assets/hero.jpg" alt="Hiker sitting on a mountain edge at sunrise">
+    </div>
+    <div class="container hero-content">
+      <p class="eyebrow">Explore · Learn · Grow</p>
+      <h1>Discover Ideas That <span class="grad-text">Inspire</span></h1>
+      <p>Read, write and share stories, tips, and insights on health, travel, tech, lifestyle and more.</p>
+      <form class="big-search" action="blog.html" method="get">
+        <input name="q" placeholder="Search for articles, topics, or authors...">
+        <button class="btn btn-primary" type="submit">Search</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- POPULAR -->
+  <section class="section">
+    <div class="container">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Featured Posts</p>
+          <h2>Popular This Week</h2>
+        </div>
+        <a href="blog.html" class="link">View All →</a>
+      </div>
+      <div class="grid grid-4" id="popular"></div>
+    </div>
+  </section>
+
+  <!-- LATEST -->
+  <section class="section alt">
+    <div class="container">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Fresh Reads</p>
+          <h2>Latest Stories</h2>
+        </div>
+        <a href="blog.html" class="link">Browse all →</a>
+      </div>
+      <div class="grid grid-3" id="latest"></div>
+    </div>
+  </section>
+
+  <!-- CATEGORIES -->
+  <section class="section">
+    <div class="container">
+      <div class="section-head"><h2>Browse by Category</h2></div>
+      <div class="tag-cloud" id="cats"></div>
+    </div>
+  </section>
+
+  <script src="js/common.js"></script>
+  <script>
+    initLayout('home');
+
+    (async () => {
+      const popular = await api('/api/posts/popular');
+      $('#popular').innerHTML = popular.length ? popular.map(postCardHTML).join('') : emptyState('No posts yet.');
+
+      const latest = await api('/api/posts?limit=6');
+      $('#latest').innerHTML = latest.posts.length ? latest.posts.map(postCardHTML).join('') : emptyState('No posts yet.');
+
+      const cats = await api('/api/categories');
+      $('#cats').innerHTML = cats
+        .map((c) => `<a class="tag-pill" href="blog.html?category=${encodeURIComponent(c.name)}">${escapeHTML(c.name)} (${c.count})</a>`)
+        .join('');
+    })().catch((err) => console.error(err));
+  </script>
+</body>
+</html>

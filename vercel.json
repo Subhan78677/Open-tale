@@ -1,0 +1,16 @@
+{
+  "outputDirectory": "public",
+  "rewrites": [
+    { "source": "/api/auth/:action", "destination": "/api/auth?action=:action" },
+    { "source": "/api/admin/users/:id", "destination": "/api/admin?action=user&id=:id" },
+    { "source": "/api/admin/:action", "destination": "/api/admin?action=:action" },
+    { "source": "/api/posts/quota", "destination": "/api/posts?action=quota" },
+    { "source": "/api/posts/popular", "destination": "/api/posts?action=popular" },
+    { "source": "/api/posts/:slug/related", "destination": "/api/posts?action=related&slug=:slug" },
+    { "source": "/api/posts/:key", "destination": "/api/posts?key=:key" },
+    { "source": "/api/categories", "destination": "/api/posts?action=categories" },
+    { "source": "/api/tags", "destination": "/api/posts?action=tags" },
+    { "source": "/api/upload", "destination": "/api/index?action=upload" },
+    { "source": "/api/profile", "destination": "/api/index?action=profile" }
+  ]
+}

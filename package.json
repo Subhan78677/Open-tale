@@ -1,0 +1,17 @@
+{
+  "name": "opentale",
+  "version": "3.0.0",
+  "description": "Open Tale - blog platform deployed as Vercel serverless functions",
+  "private": true,
+  "scripts": {
+    "dev": "vercel dev"
+  },
+  "dependencies": {
+    "@libsql/client": "^0.14.0",
+    "@vercel/blob": "^0.27.0",
+    "bcryptjs": "^2.4.3",
+    "busboy": "^1.6.0",
+    "jsonwebtoken": "^9.0.2",
+    "nodemailer": "^6.9.14"
+  }
+}

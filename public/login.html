@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login – Open Tale</title>
+  <link rel="icon" href="assets/favicon.png">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="header"></div>
+
+  <section class="section">
+    <div class="container narrow">
+      <div class="form-card" style="max-width:460px;margin:0 auto">
+
+        <!-- STEP 1: login or create account -->
+        <div id="step-auth">
+          <div class="tabs">
+            <button class="tab active" data-mode="login" type="button">Login</button>
+            <button class="tab" data-mode="register" type="button">Create account</button>
+          </div>
+
+          <div id="form-error" class="alert error" hidden></div>
+
+          <form id="auth-form">
+            <div class="field" id="name-field" hidden>
+              <label for="name">Full name</label>
+              <input id="name" name="name" placeholder="e.g. Sarah Khan">
+            </div>
+            <div class="field">
+              <label for="email">Email</label>
+              <input id="email" type="email" name="email" required placeholder="you@example.com">
+            </div>
+            <div class="field">
+              <label for="password">Password</label>
+              <input id="password" type="password" name="password" required minlength="6" placeholder="At least 6 characters">
+            </div>
+            <button class="btn btn-primary" id="auth-btn" type="submit" style="width:100%;justify-content:center">Login</button>
+          </form>
+        </div>
+
+        <!-- STEP 2: email verification code -->
+        <div id="step-verify" hidden>
+          <h2 style="margin-bottom:8px">Verify your email</h2>
+          <p class="hint" style="margin-bottom:18px">
+            We sent a 6-digit code to <strong id="verify-email"></strong>. It expires in 10 minutes.
+            Check your spam folder if you don't see it.
+          </p>
+          <div id="verify-error" class="alert error" hidden></div>
+          <form id="verify-form">
+            <div class="field">
+              <label for="code">Verification code</label>
+              <input id="code" inputmode="numeric" maxlength="6" pattern="[0-9]{6}" required
+                     placeholder="123456" autocomplete="one-time-code">
+            </div>
+            <button class="btn btn-primary" type="submit" style="width:100%;justify-content:center">Verify and continue</button>
+          </form>
+          <p style="text-align:center;margin-top:16px">
+            <button class="link" id="resend" type="button" style="background:none;border:0;cursor:pointer">Resend code</button>
+            &nbsp;·&nbsp;
+            <button class="link" id="back" type="button" style="background:none;border:0;cursor:pointer">Use a different email</button>
+          </p>
+        </div>
+
+        <p class="hint" style="margin-top:14px">Demo account: sarah@opentale.com / password123</p>
+      </div>
+    </div>
+  </section>
+
+  <script src="js/common.js"></script>
+  <script>
+    initLayout('login');
+
+    let mode = 'login';
+    let pendingEmail = '';
+    let next = new URLSearchParams(location.search).get('next') || 'blog.html';
+    // Only allow redirects to pages on this site (for example write.html)
+    if (!/^[a-z0-9_-]+\.html(\?.*)?$/i.test(next)) next = 'blog.html';
+
+    const showError = (sel, msg) => { $(sel).textContent = msg; $(sel).hidden = false; };
+    const clearError = (sel) => { $(sel).hidden = true; };
+
+    function showStep(step) {
+      $('#step-auth').hidden = step !== 'auth';
+      $('#step-verify').hidden = step !== 'verify';
+    }
+
+    // Starts the 60-second wait before "Resend code" works again
+    function startCooldown() {
+      const btn = $('#resend');
+      let s = 60;
+      btn.disabled = true;
+      btn.textContent = `Resend code (${s}s)`;
+      const timer = setInterval(() => {
+        s--;
+        btn.textContent = `Resend code (${s}s)`;
+        if (s <= 0) {
+          clearInterval(timer);
+          btn.disabled = false;
+          btn.textContent = 'Resend code';
+        }
+      }, 1000);
+    }
+
+    function goToVerify(email) {
+      pendingEmail = email;
+      $('#verify-email').textContent = email;
+      clearError('#verify-error');
+      $('#code').value = '';
+      showStep('verify');
+      startCooldown();
+    }
+
+    $$('.tab').forEach((tab) => {
+      tab.onclick = () => {
+        mode = tab.dataset.mode;
+        $$('.tab').forEach((t) => t.classList.toggle('active', t === tab));
+        $('#name-field').hidden = mode === 'login';
+        $('#name').required = mode === 'register';
+        $('#auth-btn').textContent = mode === 'login' ? 'Login' : 'Create account';
+      };
+    });
+
+    // Login or sign up
+    $('#auth-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      clearError('#form-error');
+      const body = Object.fromEntries(new FormData(e.target));
+      try {
+        if (mode === 'login') {
+          await api('/api/auth/login', { method: 'POST', body });
+          location.href = next;
+        } else {
+          const res = await api('/api/auth/register', { method: 'POST', body });
+          goToVerify(res.email);
+        }
+      } catch (ex) {
+        if (ex.needsVerification) {
+          goToVerify(ex.email);
+        } else {
+          showError('#form-error', ex.message);
+        }
+      }
+    });
+
+    // Confirm the 6-digit code
+    $('#verify-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      clearError('#verify-error');
+      try {
+        await api('/api/auth/verify', { method: 'POST', body: { email: pendingEmail, code: $('#code').value.trim() } });
+        location.href = next;
+      } catch (ex) {
+        showError('#verify-error', ex.message);
+      }
+    });
+
+    $('#resend').onclick = async () => {
+      clearError('#verify-error');
+      try {
+        await api('/api/auth/resend-code', { method: 'POST', body: { email: pendingEmail } });
+        startCooldown();
+      } catch (ex) {
+        showError('#verify-error', ex.message);
+      }
+    };
+
+    $('#back').onclick = () => {
+      clearError('#verify-error');
+      showStep('auth');
+    };
+  </script>
+</body>
+</html>
