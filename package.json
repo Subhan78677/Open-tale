@@ -5,6 +5,7 @@
   "private": true,
   "scripts": {
     "dev": "vercel dev",
+    "start": "npx vercel dev",
     "build": "npm install better-sqlite3"
   },
   "dependencies": {
