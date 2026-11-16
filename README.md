@@ -1,91 +1,94 @@
-# Open Tale – Deploy on Vercel (free)
+# Open Tale – Hostinger deployment
 
-The site runs as Vercel Serverless Functions. Each file in `api/` is one route.
+A traditional Node.js + Express server with one entry point (`server.js`),
+one routing file (`src/routes/index.js`), and a SQLite database file that stays on disk.
+No Vercel configuration is used.
 
-| Part | Where it runs | Free service |
-|---|---|---|
-| Pages (HTML, CSS, JS, images) | `public/` | Vercel |
-| API routes | `api/` (serverless functions) | Vercel |
-| Database (users, posts) | Turso | Turso free tier |
-| Uploaded images | Vercel Blob | Vercel Blob free tier |
-| Verification emails | Your SMTP provider | e.g. Brevo, Resend, or Gmail app password |
+## Project structure
 
-The frontend (`public/`) is unchanged from the previous version.
+```
+opentale-hostinger/
+├── server.js                 Single entry point (Hostinger starts this file)
+├── package.json
+├── .env.example              Variables to enter in the Hostinger panel
+├── public/                   Website pages, CSS, JavaScript, images (unchanged design)
+└── src/
+    ├── config.js             All settings from environment variables
+    ├── db.js                 SQLite database (persistent file) and tables
+    ├── seed.js               Admin account and demo posts
+    ├── routes/
+    │   ├── index.js          Unified routing: mounts every API router
+    │   ├── auth.js           /api/auth/*   register, verify, login, logout, me
+    │   ├── posts.js          /api/posts/*  list, create, view, edit, delete, popular, quota, related
+    │   ├── admin.js          /api/admin/*  stats, posts, users, bans, roles, settings
+    │   └── site.js           /api/*        profile, upload, categories, tags
+    ├── middleware/
+    │   ├── auth.js           Login, verified-email and admin checks
+    │   ├── upload.js         Image uploads saved to disk (JPG/PNG/WEBP/GIF, 5 MB)
+    │   └── errors.js         One error handler: JSON responses for every route
+    └── utils/                Helpers: errors, posts, auth, moderation, mailer
+```
 
-## 1. Create the free services
+## 1. Prepare the folders on Hostinger
 
-**Turso (database)**
-1. Sign up at turso.tech and create a database.
-2. Copy the database URL (starts with `libsql://`).
-3. Create an auth token for that database.
+In hPanel open **File Manager** and create a folder outside the app, for example
+`/home/<your-user>/opentale-data/`. Inside it, create an empty folder named `uploads`.
+The database file `opentale.db` is created there automatically.
 
-**Vercel Blob (images)**
-1. In your Vercel project, open **Storage → Create → Blob** and connect it to the project.
-2. Vercel adds `BLOB_READ_WRITE_TOKEN` automatically.
+## 2. Create the Node.js app
 
-## 2. Put the project on GitHub
+1. In hPanel go to **Websites → Add Website → Node.js Web App** (or open your existing Node.js app).
+2. Choose **Node.js version 20 or newer**.
+3. Set the **Application root** to the folder where you upload this project.
+4. Set the **Application startup file** to `server.js`.
 
-Upload this folder to a GitHub repository (the `opentale-vercel` folder).
+## 3. Upload the project
 
-## 3. Deploy on Vercel
+Upload the contents of this folder (not the folder itself) with **File Manager**,
+or connect a GitHub repository in hPanel.
 
-1. Go to vercel.com → **Add New → Project** and import the repository.
-2. Framework preset: **Other**. Leave build and install commands empty.
-   The `vercel.json` file sets the public folder for you.
-3. Under **Environment Variables**, add:
+## 4. Set environment variables
+
+In the Node.js app settings, add the variables from `.env.example`.
+At minimum set:
 
 | Name | Value |
 |---|---|
-| `TURSO_DATABASE_URL` | Your `libsql://...` URL from Turso |
-| `TURSO_AUTH_TOKEN` | Your Turso token |
-| `JWT_SECRET` | A long random text, e.g. 40+ random characters |
-| `ADMIN_EMAIL` | Your admin email |
-| `ADMIN_PASSWORD` | A strong password for the admin |
-| `SMTP_HOST` | Your SMTP server, e.g. `smtp-relay.brevo.com` |
-| `SMTP_PORT` | `587` (or `465` for SSL) |
-| `SMTP_USER` | Your SMTP username |
-| `SMTP_PASS` | Your SMTP password or app password |
-| `MAIL_FROM` | e.g. `Open Tale <no-reply@yourdomain.com>` |
+| `NODE_ENV` | `production` |
+| `JWT_SECRET` | a long random text (required, the server refuses to start without it) |
+| `ADMIN_EMAIL` | your admin email |
+| `ADMIN_PASSWORD` | a strong password |
+| `COOKIE_SECURE` | `true` (after SSL is active) |
+| `DB_FILE` | `/home/<your-user>/opentale-data/opentale.db` |
+| `UPLOAD_DIR` | `/home/<your-user>/opentale-data/uploads` |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` | your email provider settings |
 
-`BLOB_READ_WRITE_TOKEN` is added by the Blob storage connection in step 1.
+## 5. Install and start
 
-4. Click **Deploy**. Vercel gives you a live address such as `https://opentale.vercel.app`.
+1. Click **Run NPM Install** (or run `npm install`).
+2. Click **Restart** (or **Start**).
+3. Open your domain. The login page is at `/login.html`.
 
-Users open that address, sign up, enter the code from their email, and log in. No commands are needed.
+On the first start the admin account is created and six demo posts are added.
 
-## 4. Local testing (optional)
-
-Install the Vercel CLI once (`npm i -g vercel`), then in the project folder run:
+## Local testing (optional)
 
 ```
 npm install
-vercel dev
+npm start
 ```
 
-Open the address it prints (usually http://localhost:3000). Without `TURSO_DATABASE_URL`,
-the site uses a local file named `opentale.db`. Image uploads need `BLOB_READ_WRITE_TOKEN`
-in a `.env.local` file (copy it from the Vercel dashboard).
+Then open http://localhost:3000/login.html. Without environment variables the server uses
+`data/opentale.db` and `uploads/` inside the project, and verification codes print in the terminal.
 
-## 5. Free-tier limits to know
+## Notes
 
-- **Image size:** Vercel limits each request to about 4.5 MB, so images are capped at 4 MB.
-- **Blob and Turso:** both have monthly free limits. Check their pricing pages if the site grows.
-- **Cold starts:** the first request after a quiet period can take a second or two longer.
-- **Existing data:** accounts and posts from the old `opentale.db` file are not copied
-  automatically. The new database starts with the admin account and demo posts.
-
-## 6. Folder structure
-
-```
-opentale-vercel/
-├── api/                      Serverless functions (one file per route)
-│   ├── auth/                 register, verify, resend-code, login, logout, me
-│   ├── posts/                index (list/create), [slug] (view/edit/delete),
-│   │                         related, popular, quota
-│   ├── admin/                stats, posts, settings, users, users/[id]
-│   ├── categories.js, tags.js, upload.js, profile.js
-├── lib/                      Shared code: database, auth, posts, uploads, mail
-├── public/                   The website (unchanged design and content)
-├── vercel.json               Serves public/ and maps /api/posts/:slug/related
-└── package.json
-```
+- **Backups:** copy the `opentale-data` folder regularly (database and uploaded images).
+- **Redeploys:** because the database and uploads live outside the app folder,
+  uploading new code does not delete accounts or posts.
+- **Old data:** accounts and posts from the Vercel version are not copied automatically.
+- **Native module:** `better-sqlite3` is installed with npm. If `npm install` fails on Hostinger
+  with a build error, contact Hostinger support or ask me to switch to a pure-JavaScript SQLite option.
+- **Email:** without SMTP settings, verification codes are printed in the server log
+  (hPanel Node.js logs), which is useful for testing only.
+- **Content rules:** vulgar and 18+ words are blocked by `src/utils/moderation.js`.

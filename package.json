@@ -1,19 +1,23 @@
 {
   "name": "opentale",
-  "version": "3.0.0",
-  "description": "Open Tale - blog platform deployed on Hostinger",
+  "version": "4.0.0",
+  "description": "Open Tale blog platform - traditional Node.js + Express + SQLite server",
   "private": true,
+  "main": "server.js",
   "scripts": {
-    "build": "echo 'No build step required'",
-    "start": "node server.js"
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "engines": {
+    "node": ">=18"
   },
   "dependencies": {
-    "@libsql/client": "^0.14.0",
-    "@vercel/blob": "^0.27.0",
     "bcryptjs": "^2.4.3",
-    "busboy": "^1.6.0",
+    "better-sqlite3": "^11.0.0",
+    "cookie-parser": "^1.4.6",
     "express": "^4.19.2",
     "jsonwebtoken": "^9.0.2",
+    "multer": "^2.0.0",
     "nodemailer": "^6.9.14"
   }
 }

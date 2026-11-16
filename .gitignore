@@ -1,2 +1,6 @@
-.vercel
-.env*
+node_modules/
+data/
+uploads/
+*.db
+*.db-*
+.env
