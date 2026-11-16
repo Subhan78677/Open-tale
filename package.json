@@ -4,6 +4,7 @@
   "description": "Open Tale - blog platform deployed on Hostinger",
   "private": true,
   "scripts": {
+    "build": "echo 'No build step required'",
     "start": "node server.js"
   },
   "dependencies": {
