@@ -4,15 +4,15 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Middleware for parsing JSON and URL-encoded data
+// Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Serve static frontend files from 'public' folder
-app.use(express.static(path.join(__dirname, 'public')));
+// Absolute path configuration for Hostinger
+const publicPath = path.join(process.cwd(), 'public');
+app.use(express.static(publicPath));
 
-// Import and mount API routes from 'api/' folder
-// (Hostinger par single entry point chalane ke liye)
+// Import and mount API routes securely
 try {
   const adminApi = require('./api/admin');
   const authApi = require('./api/auth');
@@ -27,11 +27,11 @@ try {
   console.error("Error loading API routes:", err);
 }
 
-// Fallback to index.html for SPA/frontend routing
+// Fallback route to serve frontend index.html
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  res.sendFile(path.join(publicPath, 'index.html'));
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server is running on port ${PORT}`);
 });
