@@ -44,6 +44,7 @@ app.use((req, res) => {
 // Errors from any route end here
 app.use(errorHandler);
 
-app.listen(config.PORT, () => {
-  console.log(`Open Tale is running on port ${config.PORT}`);
+const PORT = process.env.PORT || config.PORT || 3000;
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Open Tale is running on port ${PORT}`);
 });
