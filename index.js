@@ -5,8 +5,6 @@
 const express = require('express');
 const cookieParser = require('cookie-parser');
 const path = require('path');
-const { SitemapStream, streamToPromise } = require('sitemap');
-const { Readable } = require('stream');
 
 const config = require('./src/config');
 
@@ -36,21 +34,12 @@ app.use(express.static(config.PUBLIC_DIR));
 app.use('/uploads', express.static(config.UPLOAD_DIR));
 
 // ==========================================
-// Dynamic Sitemap Route for Google Search Console
+// Safe & Lightweight Dynamic Sitemap Route
 // ==========================================
-app.get('/sitemap.xml', async (req, res) => {
+app.get('/sitemap.xml', (req, res) => {
   try {
     res.header('Content-Type', 'application/xml');
 
-    // Static pages
-    const links = [
-      { url: '/', changefreq: 'daily', priority: 1.0 },
-      { url: '/blog.html', changefreq: 'weekly', priority: 0.8 },
-      { url: '/login.html', changefreq: 'monthly', priority: 0.3 },
-      { url: '/write.html', changefreq: 'monthly', priority: 0.5 }
-    ];
-
-    // Fetch posts/blogs from database dynamically
     let posts = [];
     try {
       if (db && typeof db.prepare === 'function') {
@@ -60,18 +49,28 @@ app.get('/sitemap.xml', async (req, res) => {
       console.error('Error fetching posts for sitemap:', err);
     }
 
-    posts.forEach((post) => {
-      links.push({
-        url: `/post.html?id=${post.id}`,
-        changefreq: 'weekly',
-        lastmod: post.updated_at || post.createdAt,
-        priority: 0.7
-      });
+    let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
+    xml += `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n`;
+
+    // Static pages
+    const staticPages = [
+      { url: '', priority: '1.0', changefreq: 'daily' },
+      { url: '/blog.html', priority: '0.8', changefreq: 'weekly' },
+      { url: '/login.html', priority: '0.3', changefreq: 'monthly' },
+      { url: '/write.html', priority: '0.5', changefreq: 'monthly' }
+    ];
+
+    staticPages.forEach((p) => {
+      xml += `  <url>\n    <loc>https://opentale.blog${p.url}</loc>\n    <changefreq>${p.changefreq}</changefreq>\n    <priority>${p.priority}</priority>\n  </url>\n`;
     });
 
-    const stream = new SitemapStream({ hostname: 'https://opentale.blog' });
-    const data = await streamToPromise(Readable.from(links).pipe(stream));
-    res.send(data.toString());
+    // Dynamic blog posts from database
+    posts.forEach((post) => {
+      xml += `  <url>\n    <loc>https://opentale.blog/post.html?id=${post.id}</loc>\n    <changefreq>weekly</changefreq>\n    <priority>0.7</priority>\n  </url>\n`;
+    });
+
+    xml += `</urlset>`;
+    res.send(xml);
   } catch (e) {
     console.error(e);
     res.status(500).end();
