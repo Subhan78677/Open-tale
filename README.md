@@ -1,7 +1,7 @@
 # Open Tale – Hostinger deployment
 
 A traditional Node.js + Express server with one entry point (`server.js`),
-one routing file (`src/routes/index.js`), and a SQLite database file that stays on disk.
+one routing file (`src/routes/index.js`), and a Turso (libSQL) cloud database.
 No Vercel configuration is used.
 
 ## Project structure
@@ -14,7 +14,7 @@ opentale-hostinger/
 ├── public/                   Website pages, CSS, JavaScript, images (unchanged design)
 └── src/
     ├── config.js             All settings from environment variables
-    ├── db.js                 SQLite database (persistent file) and tables
+    ├── db.js                 Turso (libSQL) connection, tables, and indexes
     ├── seed.js               Admin account (only when ADMIN_EMAIL and ADMIN_PASSWORD are set)
     ├── routes/
     │   ├── index.js          Unified routing: mounts every API router
@@ -59,7 +59,8 @@ At minimum set:
 | `ADMIN_EMAIL` | your admin email |
 | `ADMIN_PASSWORD` | a strong password (required to create the admin account) |
 | `COOKIE_SECURE` | `true` (after SSL is active) |
-| `DB_FILE` | `/home/<your-user>/opentale-data/opentale.db` |
+| `DATABASE_URL` | your Turso URL, e.g. `libsql://opentale-db-yourname.turso.io` (required) |
+| `DATABASE_AUTH_TOKEN` | your Turso auth token (required) |
 | `UPLOAD_DIR` | `/home/<your-user>/opentale-data/uploads` |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` | your email provider settings |
 
@@ -87,12 +88,12 @@ Then open http://localhost:3000/login.html. Without environment variables the se
 
 ## Notes
 
-- **Backups:** copy the `opentale-data` folder regularly (database and uploaded images).
+- **Backups:** use Turso's backup or export tools for the database, and copy the uploads folder regularly.
 - **Redeploys:** because the database and uploads live outside the app folder,
   uploading new code does not delete accounts or posts.
 - **Old data:** accounts and posts from the Vercel version are not copied automatically.
-- **Native module:** `better-sqlite3` is installed with npm. If `npm install` fails on Hostinger
-  with a build error, contact Hostinger support or ask me to switch to a pure-JavaScript SQLite option.
+- **Database:** data lives in Turso, so it is not stored on the Hostinger server. The tables, indexes, and default settings are created automatically on the first start. If the server cannot reach Turso, it stops with a clear error in the logs. Check `DATABASE_URL` and `DATABASE_AUTH_TOKEN`.
+- **Local testing without Turso:** if `DATABASE_URL` is empty, a local file `data/opentale.db` is used. This is for development only. Production refuses to start without `DATABASE_URL`.
 - **Email:** without SMTP settings, verification codes are printed in the server log
   (hPanel Node.js logs), which is useful for testing only.
 - **Content rules:** vulgar and 18+ words are blocked by `src/utils/moderation.js`.

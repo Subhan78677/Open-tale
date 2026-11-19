@@ -1,5 +1,4 @@
 // All settings come from environment variables (set them in the Hostinger panel).
-// Defaults are fine for local testing only.
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
@@ -15,15 +14,16 @@ module.exports = {
   // Set COOKIE_SECURE=true when the site is served over HTTPS (Hostinger SSL)
   COOKIE_SECURE: process.env.COOKIE_SECURE === 'true',
 
-  // SQLite database file. Keep it outside the app folder so redeploys don't remove it.
-  DB_FILE: process.env.DB_FILE || path.join(ROOT, 'data', 'opentale.db'),
+  // Turso (libSQL) database. Required in production.
+  DATABASE_URL: process.env.DATABASE_URL || '',
+  DATABASE_AUTH_TOKEN: process.env.DATABASE_AUTH_TOKEN || '',
 
-  // Folder for uploaded images. Also keep it outside the app folder if possible.
+  // Folder for uploaded images. Keep it outside the app folder if possible.
   UPLOAD_DIR: process.env.UPLOAD_DIR || path.join(ROOT, 'uploads'),
   PUBLIC_DIR: path.join(ROOT, 'public'),
   MAX_UPLOAD_BYTES: 5 * 1024 * 1024,
 
-  // Admin account is created only when both are set in the environment (no default password in code)
+  // Admin account is created only when both are set in the environment
   ADMIN_EMAIL: (process.env.ADMIN_EMAIL || '').toLowerCase(),
   ADMIN_PASSWORD: process.env.ADMIN_PASSWORD || '',
 };

@@ -1,16 +1,58 @@
-const Database = require('better-sqlite3');
+// Database: Turso (libSQL) through @libsql/client.
+// Production reads DATABASE_URL and DATABASE_AUTH_TOKEN from the environment.
+// Without DATABASE_URL a local file is used for development only.
 const fs = require('fs');
 const path = require('path');
+const { createClient } = require('@libsql/client');
 const config = require('./config');
 
-// Make sure the folder for the database file exists
-fs.mkdirSync(path.dirname(config.DB_FILE), { recursive: true });
+function databaseUrl() {
+  if (config.DATABASE_URL) return config.DATABASE_URL;
+  if (config.IS_PRODUCTION) {
+    throw new Error('DATABASE_URL is not set. Add your Turso database URL in the Hostinger environment variables.');
+  }
+  const dir = path.join(config.ROOT, 'data');
+  fs.mkdirSync(dir, { recursive: true });
+  return 'file:' + path.join(dir, 'opentale.db');
+}
 
-const db = new Database(config.DB_FILE);
-db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
+const client = createClient({
+  url: databaseUrl(),
+  authToken: config.DATABASE_AUTH_TOKEN || undefined,
+});
 
-db.exec(`
+// Turns a libSQL result into plain objects, e.g. [{ id: 1, email: 'a@b.c' }]
+function toObjects(result) {
+  return result.rows.map((row) => Object.fromEntries(result.columns.map((col, i) => [col, row[i]])));
+}
+
+// All rows for a query
+async function all(sql, args = []) {
+  return toObjects(await client.execute({ sql, args }));
+}
+
+// The first row, or null
+async function get(sql, args = []) {
+  const rows = await all(sql, args);
+  return rows[0] || null;
+}
+
+// Runs a write (INSERT, UPDATE, DELETE)
+async function run(sql, args = []) {
+  const result = await client.execute({ sql, args });
+  return {
+    changes: Number(result.rowsAffected),
+    lastInsertRowid: result.lastInsertRowid === undefined ? null : Number(result.lastInsertRowid),
+  };
+}
+
+// Runs several statements together: all succeed or none do.
+// Pass a list of [sql, args] pairs.
+async function batch(statements) {
+  return client.batch(statements.map(([sql, args = []]) => ({ sql, args })), 'write');
+}
+
+const SCHEMA = `
   CREATE TABLE IF NOT EXISTS users (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,
     name           TEXT NOT NULL,
@@ -56,16 +98,24 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_posts_author   ON posts(author_id, created_at);
   CREATE INDEX IF NOT EXISTS idx_posts_category ON posts(category);
-`);
+  CREATE INDEX IF NOT EXISTS idx_posts_created  ON posts(created_at);
+  CREATE INDEX IF NOT EXISTS idx_users_last_seen ON users(last_seen);
+`;
 
-// Upgrade older databases that don't have the last_seen column yet
-const userColumns = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
-if (!userColumns.includes('last_seen')) {
-  db.exec('ALTER TABLE users ADD COLUMN last_seen TEXT');
+// Creates the tables, indexes and default settings if they don't exist.
+// Safe to run on every start.
+async function init() {
+  await client.executeMultiple(SCHEMA);
+
+  // Upgrade databases created before last_seen existed
+  const columns = (await all('PRAGMA table_info(users)')).map((c) => c.name);
+  if (!columns.includes('last_seen')) {
+    await run('ALTER TABLE users ADD COLUMN last_seen TEXT');
+  }
+
+  // Default posting rule: 2 posts every 24 hours (admin can change it)
+  await run(`INSERT OR IGNORE INTO settings (key, value) VALUES ('post_limit', '2')`);
+  await run(`INSERT OR IGNORE INTO settings (key, value) VALUES ('post_window_hours', '24')`);
 }
 
-// Default posting rule: 2 posts every 24 hours (admin can change it)
-db.prepare(`INSERT OR IGNORE INTO settings (key, value) VALUES ('post_limit', '2')`).run();
-db.prepare(`INSERT OR IGNORE INTO settings (key, value) VALUES ('post_window_hours', '24')`).run();
-
-module.exports = db;
+module.exports = { all, get, run, batch, init };

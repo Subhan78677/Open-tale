@@ -16,25 +16,28 @@ const slugify = (t) =>
 const readTime = (content) =>
   Math.max(1, Math.ceil(content.replace(/<[^>]+>/g, ' ').trim().split(/\s+/).length / 200));
 
-function getSetting(key) {
-  const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
+async function getSetting(key) {
+  const row = await db.get('SELECT value FROM settings WHERE key = ?', [key]);
   return row ? row.value : null;
 }
 
-function setSetting(key, value) {
-  db.prepare(`INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`)
-    .run(key, String(value));
+async function setSetting(key, value) {
+  await db.run(
+    `INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+    [key, String(value)]
+  );
 }
 
 // How many posts a normal user may still publish in the current window
-function quotaInfo(user) {
+async function quotaInfo(user) {
   if (user.role === 'admin') return { unlimited: true };
 
-  const limit = Number(getSetting('post_limit'));
-  const hours = Number(getSetting('post_window_hours'));
-  const rows = db.prepare(
-    `SELECT created_at FROM posts WHERE author_id = ? AND created_at > datetime('now', ?) ORDER BY created_at ASC`
-  ).all(user.id, `-${hours} hours`);
+  const limit = Number(await getSetting('post_limit'));
+  const hours = Number(await getSetting('post_window_hours'));
+  const rows = await db.all(
+    `SELECT created_at FROM posts WHERE author_id = ? AND created_at > datetime('now', ?) ORDER BY created_at ASC`,
+    [user.id, `-${hours} hours`]
+  );
 
   const used = rows.length;
   const remaining = Math.max(limit - used, 0);

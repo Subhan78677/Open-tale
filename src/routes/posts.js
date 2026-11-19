@@ -1,6 +1,6 @@
 const express = require('express');
 const db = require('../db');
-const { HttpError } = require('../utils/errors');
+const { HttpError, asyncHandler } = require('../utils/errors');
 const {
   CARD_COLS, AUTHOR_COLS, FROM,
   normalizeTags, plainExcerpt, slugify, readTime, quotaInfo,
@@ -33,8 +33,8 @@ function readPostFields(body) {
 }
 
 // Finds a post and checks the user owns it (admins can change any post)
-function findOwnedPost(user, id) {
-  const post = db.prepare('SELECT * FROM posts WHERE id = ?').get(Number(id));
+async function findOwnedPost(user, id) {
+  const post = await db.get('SELECT * FROM posts WHERE id = ?', [Number(id)]);
   if (!post) throw new HttpError(404, 'Post not found');
   if (post.author_id !== user.id && user.role !== 'admin') {
     throw new HttpError(403, 'You can only change your own posts');
@@ -43,7 +43,7 @@ function findOwnedPost(user, id) {
 }
 
 // GET /api/posts?category=&q=&page=&limit=
-router.get('/', (req, res) => {
+router.get('/', asyncHandler(async (req, res) => {
   const category = req.query.category || '';
   const search = String(req.query.q || '').trim();
   const limit = Math.min(parseInt(req.query.limit, 10) || 9, 50);
@@ -59,52 +59,55 @@ router.get('/', (req, res) => {
   }
   const w = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
-  const total = db.prepare(`SELECT COUNT(*) AS n ${FROM} ${w}`).get(...args).n;
-  const posts = db.prepare(
-    `SELECT ${CARD_COLS}, ${AUTHOR_COLS} ${FROM} ${w} ORDER BY p.created_at DESC, p.id DESC LIMIT ? OFFSET ?`
-  ).all(...args, limit, (page - 1) * limit);
+  const total = (await db.get(`SELECT COUNT(*) AS n ${FROM} ${w}`, args)).n;
+  const posts = await db.all(
+    `SELECT ${CARD_COLS}, ${AUTHOR_COLS} ${FROM} ${w} ORDER BY p.created_at DESC, p.id DESC LIMIT ? OFFSET ?`,
+    [...args, limit, (page - 1) * limit]
+  );
 
   res.json({ posts, total, page, pages: Math.max(Math.ceil(total / limit), 1) });
-});
+}));
 
 // GET /api/posts/popular  (must come before /:slug)
-router.get('/popular', (req, res) => {
-  res.json(db.prepare(
+router.get('/popular', asyncHandler(async (req, res) => {
+  res.json(await db.all(
     `SELECT ${CARD_COLS}, ${AUTHOR_COLS} ${FROM} ORDER BY p.views DESC, p.created_at DESC LIMIT 4`
-  ).all());
-});
+  ));
+}));
 
 // GET /api/posts/quota  (how many posts the logged-in user can still publish)
-router.get('/quota', authenticate, (req, res) => {
-  res.json(quotaInfo(req.user));
-});
+router.get('/quota', authenticate, asyncHandler(async (req, res) => {
+  res.json(await quotaInfo(req.user));
+}));
 
 // GET /api/posts/:slug/related
-router.get('/:slug/related', (req, res) => {
-  const post = db.prepare('SELECT id, category FROM posts WHERE slug = ?').get(req.params.slug);
+router.get('/:slug/related', asyncHandler(async (req, res) => {
+  const post = await db.get('SELECT id, category FROM posts WHERE slug = ?', [req.params.slug]);
   if (!post) return res.json([]);
-  res.json(db.prepare(
+  res.json(await db.all(
     `SELECT ${CARD_COLS}, ${AUTHOR_COLS} ${FROM}
-     WHERE p.category = ? AND p.id != ? ORDER BY p.created_at DESC LIMIT 3`
-  ).all(post.category, post.id));
-});
+     WHERE p.category = ? AND p.id != ? ORDER BY p.created_at DESC LIMIT 3`,
+    [post.category, post.id]
+  ));
+}));
 
 // GET /api/posts/:slug  (one post; counts a view)
-router.get('/:slug', (req, res) => {
-  const post = db.prepare(
-    `SELECT ${CARD_COLS}, p.content, ${AUTHOR_COLS} ${FROM} WHERE p.slug = ?`
-  ).get(req.params.slug);
+router.get('/:slug', asyncHandler(async (req, res) => {
+  const post = await db.get(
+    `SELECT ${CARD_COLS}, p.content, ${AUTHOR_COLS} ${FROM} WHERE p.slug = ?`,
+    [req.params.slug]
+  );
   if (!post) throw new HttpError(404, 'Post not found');
-  db.prepare('UPDATE posts SET views = views + 1 WHERE id = ?').run(post.id);
+  await db.run('UPDATE posts SET views = views + 1 WHERE id = ?', [post.id]);
   res.json(post);
-});
+}));
 
 // POST /api/posts  (multipart form with an optional "cover" image)
-router.post('/', authenticate, requireVerified, imageUpload.single('cover'), (req, res) => {
+router.post('/', authenticate, requireVerified, imageUpload.single('cover'), asyncHandler(async (req, res) => {
   try {
     const fields = readPostFields(req.body);
 
-    const quota = quotaInfo(req.user);
+    const quota = await quotaInfo(req.user);
     if (!quota.unlimited && quota.remaining <= 0) {
       throw new HttpError(429,
         `You can publish ${quota.limit} posts every ${quota.windowHours} hours. Please try again later.`,
@@ -113,24 +116,25 @@ router.post('/', authenticate, requireVerified, imageUpload.single('cover'), (re
 
     const slug = `${slugify(fields.title)}-${Date.now().toString(36)}`;
     const cover = req.file ? uploadUrl(req.file) : '';
-    db.prepare(
+    await db.run(
       `INSERT INTO posts (title, slug, excerpt, content, category, tags, cover_image, read_time, author_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(
-      fields.title, slug, fields.excerpt || plainExcerpt(fields.content), fields.content,
-      fields.category, fields.tags, cover, readTime(fields.content), req.user.id
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        fields.title, slug, fields.excerpt || plainExcerpt(fields.content), fields.content,
+        fields.category, fields.tags, cover, readTime(fields.content), req.user.id,
+      ]
     );
     res.status(201).json({ slug });
   } catch (err) {
     discardUpload(req);
     throw err;
   }
-});
+}));
 
 // PUT /api/posts/:id  (edit; author or admin)
-router.put('/:id', authenticate, requireVerified, imageUpload.single('cover'), (req, res) => {
+router.put('/:id', authenticate, requireVerified, imageUpload.single('cover'), asyncHandler(async (req, res) => {
   try {
-    const post = findOwnedPost(req.user, req.params.id);
+    const post = await findOwnedPost(req.user, req.params.id);
     const fields = readPostFields(req.body);
 
     // Keep the old image unless a new one was uploaded
@@ -140,27 +144,28 @@ router.put('/:id', authenticate, requireVerified, imageUpload.single('cover'), (
       removeUpload(post.cover_image);
     }
 
-    db.prepare(
+    await db.run(
       `UPDATE posts SET title = ?, excerpt = ?, content = ?, category = ?, tags = ?,
                         cover_image = ?, read_time = ?, updated_at = datetime('now')
-       WHERE id = ?`
-    ).run(
-      fields.title, fields.excerpt || plainExcerpt(fields.content), fields.content,
-      fields.category, fields.tags, cover, readTime(fields.content), post.id
+       WHERE id = ?`,
+      [
+        fields.title, fields.excerpt || plainExcerpt(fields.content), fields.content,
+        fields.category, fields.tags, cover, readTime(fields.content), post.id,
+      ]
     );
     res.json({ slug: post.slug });
   } catch (err) {
     discardUpload(req);
     throw err;
   }
-});
+}));
 
 // DELETE /api/posts/:id  (author or admin)
-router.delete('/:id', authenticate, (req, res) => {
-  const post = findOwnedPost(req.user, req.params.id);
-  db.prepare('DELETE FROM posts WHERE id = ?').run(post.id);
+router.delete('/:id', authenticate, asyncHandler(async (req, res) => {
+  const post = await findOwnedPost(req.user, req.params.id);
+  await db.run('DELETE FROM posts WHERE id = ?', [post.id]);
   removeUpload(post.cover_image);
   res.json({ ok: true });
-});
+}));
 
 module.exports = router;

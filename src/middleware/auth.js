@@ -1,10 +1,10 @@
 const jwt = require('jsonwebtoken');
 const db = require('../db');
 const config = require('../config');
-const { HttpError } = require('../utils/errors');
+const { HttpError, asyncHandler } = require('../utils/errors');
 
 // Requires a logged-in user. Also rejects banned accounts and records activity.
-function authenticate(req, res, next) {
+const authenticate = asyncHandler(async (req, res, next) => {
   let payload;
   try {
     payload = jwt.verify(req.cookies.token, config.JWT_SECRET);
@@ -12,14 +12,14 @@ function authenticate(req, res, next) {
     return next(new HttpError(401, 'Please log in first'));
   }
 
-  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(payload.id);
+  const user = await db.get('SELECT * FROM users WHERE id = ?', [payload.id]);
   if (!user) return next(new HttpError(401, 'Please log in first'));
   if (user.banned) return next(new HttpError(403, 'Your account has been banned. Please contact the admin.'));
 
-  db.prepare(`UPDATE users SET last_seen = datetime('now') WHERE id = ?`).run(user.id);
+  await db.run(`UPDATE users SET last_seen = datetime('now') WHERE id = ?`, [user.id]);
   req.user = user;
   next();
-}
+});
 
 function requireVerified(req, res, next) {
   if (!req.user.email_verified) {

@@ -29,14 +29,15 @@ function clearSession(res) {
 
 // Creates and emails a 6-digit code (at most one every 60 seconds)
 async function issueCode(email) {
-  const last = db.prepare('SELECT sent_at FROM verification_codes WHERE email = ?').get(email);
-  if (last && Date.now() - last.sent_at < 60 * 1000) {
+  const last = await db.get('SELECT sent_at FROM verification_codes WHERE email = ?', [email]);
+  if (last && Date.now() - Number(last.sent_at) < 60 * 1000) {
     throw new HttpError(429, 'Please wait a minute before requesting another code');
   }
   const code = String(crypto.randomInt(100000, 1000000));
-  db.prepare(
-    `INSERT OR REPLACE INTO verification_codes (email, code_hash, expires_at, attempts, sent_at) VALUES (?, ?, ?, 0, ?)`
-  ).run(email, hashCode(code), Date.now() + 10 * 60 * 1000, Date.now());
+  await db.run(
+    `INSERT OR REPLACE INTO verification_codes (email, code_hash, expires_at, attempts, sent_at) VALUES (?, ?, ?, 0, ?)`,
+    [email, hashCode(code), Date.now() + 10 * 60 * 1000, Date.now()]
+  );
   await sendVerificationCode(email, code);
 }
 
