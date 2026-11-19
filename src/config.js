@@ -23,6 +23,7 @@ module.exports = {
   PUBLIC_DIR: path.join(ROOT, 'public'),
   MAX_UPLOAD_BYTES: 5 * 1024 * 1024,
 
-  ADMIN_EMAIL: (process.env.ADMIN_EMAIL || 'admin@opentale.com').toLowerCase(),
-  ADMIN_PASSWORD: process.env.ADMIN_PASSWORD || 'admin123',
+  // Admin account is created only when both are set in the environment (no default password in code)
+  ADMIN_EMAIL: (process.env.ADMIN_EMAIL || '').toLowerCase(),
+  ADMIN_PASSWORD: process.env.ADMIN_PASSWORD || '',
 };

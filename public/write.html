@@ -199,7 +199,7 @@
           const res = editPost
             ? await api(`/api/posts/${editPost.id}`, { method: 'PUT', body: fd })
             : await api('/api/posts', { method: 'POST', body: fd });
-          location.href = 'post.html?slug=' + encodeURIComponent(res.slug);
+          location.href = '/' + encodeURIComponent(res.slug);
         } catch (ex) {
           showFormError(ex.message);
           btn.disabled = false;

@@ -54,7 +54,7 @@ function emptyState(msg) {
 }
 
 function postCardHTML(p) {
-  const url = `post.html?slug=${encodeURIComponent(p.slug)}`;
+  const url = `/${encodeURIComponent(p.slug)}`;
   return `
     <article class="post-card">
       <a href="${url}" class="post-card-media">${coverHTML(p.cover_image, 'Card image · 1200 × 675')}</a>
@@ -62,11 +62,9 @@ function postCardHTML(p) {
         <span class="tag">${escapeHTML(p.category)}</span>
         <h3><a href="${url}">${escapeHTML(p.title)}</a></h3>
         <p>${escapeHTML(p.excerpt)}</p>
-        <div class="meta">
-          ${avatarHTML(p.author_name, p.author_avatar, 26)}
-          <span>${escapeHTML(p.author_name)}</span><span>·</span>
-          <span>${formatDate(p.created_at)}</span><span>·</span>
-          <span>${p.read_time} min read</span>
+        <div class="meta meta-row">
+          <span class="meta-author">${avatarHTML(p.author_name, p.author_avatar, 26)}<span>${escapeHTML(p.author_name)}</span></span>
+          <span class="meta-date">${formatDate(p.created_at)}</span>
         </div>
       </div>
     </article>`;

@@ -283,7 +283,8 @@
         <td>${formatDate(u.created_at)}</td>
         <td class="actions">${u.id === me.id ? '<span class="hint">That is you</span>' : `
           <button class="btn btn-outline btn-small" data-act="ban" data-id="${u.id}" data-val="${u.banned ? 0 : 1}">${u.banned ? 'Unban' : 'Ban'}</button>
-          <button class="btn btn-outline btn-small" data-act="role" data-id="${u.id}" data-val="${u.role === 'admin' ? 'user' : 'admin'}">${u.role === 'admin' ? 'Remove admin' : 'Make admin'}</button>`}
+          <button class="btn btn-outline btn-small" data-act="role" data-id="${u.id}" data-val="${u.role === 'admin' ? 'user' : 'admin'}">${u.role === 'admin' ? 'Remove admin' : 'Make admin'}</button>
+          ${u.role === 'admin' ? '' : `<button class="btn btn-danger btn-small" data-user-del="${u.id}" data-name="${escapeHTML(u.name)}">Delete</button>`}`}
         </td>
       </tr>`;
 
@@ -309,7 +310,7 @@
 
     const postRow = (p) => `
       <tr>
-        <td><a class="link" href="post.html?slug=${encodeURIComponent(p.slug)}"><strong>${escapeHTML(p.title)}</strong></a></td>
+        <td><a class="link" href="/${encodeURIComponent(p.slug)}"><strong>${escapeHTML(p.title)}</strong></a></td>
         <td>${escapeHTML(p.author_name)}<br><small>${escapeHTML(p.author_email)}</small></td>
         <td>${formatDate(p.created_at)}</td>
         <td>${p.views}</td>
@@ -337,6 +338,20 @@
           await api(`/api/posts/${del.dataset.del}`, { method: 'DELETE' });
           notice('Post deleted');
           await Promise.all([loadPosts(), loadStats()]);
+        } catch (ex) {
+          notice(ex.message, false);
+        }
+        return;
+      }
+
+      const userDel = e.target.closest('button[data-user-del]');
+      if (userDel) {
+        const name = userDel.dataset.name;
+        if (!confirm(`Permanently delete ${name}? Their account, all their posts and their images will be removed. This cannot be undone.`)) return;
+        try {
+          await api(`/api/admin/users/${userDel.dataset.userDel}`, { method: 'DELETE' });
+          notice('User deleted permanently');
+          await Promise.all([loadUsers($('#search').value.trim()), loadPosts(), loadStats()]);
         } catch (ex) {
           notice(ex.message, false);
         }

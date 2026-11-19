@@ -24,7 +24,9 @@
   <script>
     initLayout('blog');
 
-    const slug = new URLSearchParams(location.search).get('slug');
+    // Reads the slug from the clean URL (/my-post-slug). Old ?slug= links still work.
+    const slug = new URLSearchParams(location.search).get('slug')
+      || decodeURIComponent(location.pathname.replace(/^\/+|\/+$|\.html$/g, ''));
 
     (async () => {
       if (!slug) throw new Error('No post selected');
@@ -38,12 +40,9 @@
       $('#article').innerHTML = `
         <span class="tag">${escapeHTML(p.category)}</span>
         <h1>${escapeHTML(p.title)}</h1>
-        <div class="meta">
-          ${avatarHTML(p.author_name, p.author_avatar, 36)}
-          <strong>${escapeHTML(p.author_name)}</strong><span>·</span>
-          <span>${formatDate(p.created_at)}</span><span>·</span>
-          <span>${p.read_time} min read</span><span>·</span>
-          <span>${p.views} views</span>
+        <div class="meta meta-row">
+          <span class="meta-author">${avatarHTML(p.author_name, p.author_avatar, 36)}<strong>${escapeHTML(p.author_name)}</strong></span>
+          <span class="meta-date">${formatDate(p.created_at)}</span>
         </div>
         <div class="share">
           <span>Share:</span>
@@ -74,7 +73,7 @@
       const related = await api(`/api/posts/${encodeURIComponent(slug)}/related`);
       $('#related').innerHTML = related.length
         ? related.map((r) => `
-            <a class="recent-item" href="post.html?slug=${encodeURIComponent(r.slug)}">
+            <a class="recent-item" href="/${encodeURIComponent(r.slug)}">
               <div class="recent-thumb">${coverHTML(r.cover_image, '')}</div>
               <div>
                 <h5>${escapeHTML(r.title)}</h5>

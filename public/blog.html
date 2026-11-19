@@ -128,7 +128,7 @@
       const recent = await api('/api/posts?limit=3');
       $('#recent').innerHTML = recent.posts
         .map((p) => `
-          <a class="recent-item" href="post.html?slug=${encodeURIComponent(p.slug)}">
+          <a class="recent-item" href="/${encodeURIComponent(p.slug)}">
             <div class="recent-thumb">${coverHTML(p.cover_image, '')}</div>
             <div>
               <h5>${escapeHTML(p.title)}</h5>

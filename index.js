@@ -5,6 +5,7 @@
 const express = require('express');
 const cookieParser = require('cookie-parser');
 const path = require('path');
+const fs = require('fs');
 
 const config = require('./src/config');
 
@@ -28,6 +29,16 @@ app.set('trust proxy', 1); // Hostinger puts the site behind a proxy
 app.use(express.json({ limit: '100kb' }));
 app.use(cookieParser());
 
+// Old post links (post.html?slug=... or post.html?id=...) redirect to the clean URL
+app.get('/post.html', (req, res, next) => {
+  if (req.query.slug) return res.redirect(301, `/${encodeURIComponent(String(req.query.slug))}`);
+  if (req.query.id) {
+    const row = db.prepare('SELECT slug FROM posts WHERE id = ?').get(Number(req.query.id));
+    if (row) return res.redirect(301, `/${encodeURIComponent(row.slug)}`);
+  }
+  next();
+});
+
 // Website pages, CSS, JS and images
 app.use(express.static(config.PUBLIC_DIR));
 // Uploaded images (kept in UPLOAD_DIR so they survive redeploys)
@@ -43,7 +54,7 @@ app.get('/sitemap.xml', (req, res) => {
     let posts = [];
     try {
       if (db && typeof db.prepare === 'function') {
-        posts = db.prepare('SELECT id, updated_at FROM posts').all();
+        posts = db.prepare('SELECT slug, updated_at FROM posts').all();
       }
     } catch (err) {
       console.error('Error fetching posts for sitemap:', err);
@@ -66,7 +77,7 @@ app.get('/sitemap.xml', (req, res) => {
 
     // Dynamic blog posts from database
     posts.forEach((post) => {
-      xml += `  <url>\n    <loc>https://opentale.blog/post.html?id=${post.id}</loc>\n    <changefreq>weekly</changefreq>\n    <priority>0.7</priority>\n  </url>\n`;
+      xml += `  <url>\n    <loc>https://opentale.blog/${encodeURIComponent(post.slug)}</loc>\n    <changefreq>weekly</changefreq>\n    <priority>0.7</priority>\n  </url>\n`;
     });
 
     xml += `</urlset>`;
@@ -79,6 +90,20 @@ app.get('/sitemap.xml', (req, res) => {
 
 // API routes
 mountRoutes(app);
+
+// Clean URLs: /my-post-slug shows a post, /blog shows blog.html, etc.
+// Runs after the API routes, so it never catches /api/... addresses.
+app.get('/:slug', (req, res, next) => {
+  const slug = req.params.slug;
+  if (!/^[a-z0-9-]+$/i.test(slug)) return next();
+
+  const post = db.prepare('SELECT id FROM posts WHERE slug = ?').get(slug);
+  if (post) return res.sendFile(path.join(config.PUBLIC_DIR, 'post.html'));
+
+  const page = path.join(config.PUBLIC_DIR, `${slug}.html`);
+  if (fs.existsSync(page)) return res.sendFile(page);
+  next();
+});
 
 // Shows any other path as a missing page
 app.use((req, res) => {

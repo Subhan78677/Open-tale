@@ -73,7 +73,7 @@
       <article class="my-post form-card">
         <div>
           <span class="tag">${escapeHTML(p.category)}</span>
-          <h3><a href="post.html?slug=${encodeURIComponent(p.slug)}">${escapeHTML(p.title)}</a></h3>
+          <h3><a href="/${encodeURIComponent(p.slug)}">${escapeHTML(p.title)}</a></h3>
           <div class="meta"><span>${formatDate(p.created_at)}</span><span>·</span><span>${p.views} views</span></div>
         </div>
         <div class="my-post-actions">

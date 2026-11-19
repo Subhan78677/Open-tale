@@ -3,6 +3,7 @@ const db = require('../db');
 const { HttpError } = require('../utils/errors');
 const { CARD_COLS, FROM, getSetting, setSetting } = require('../utils/posts');
 const { authenticate, requireAdmin } = require('../middleware/auth');
+const { removeUpload } = require('../middleware/upload');
 
 const router = express.Router();
 
@@ -54,6 +55,27 @@ router.patch('/users/:id', (req, res) => {
   if (req.body.role === 'admin' || req.body.role === 'user') {
     db.prepare('UPDATE users SET role = ? WHERE id = ?').run(req.body.role, id);
   }
+  res.json({ ok: true });
+});
+
+// DELETE /api/admin/users/:id  (permanently removes the user, their posts and their images)
+router.delete('/users/:id', (req, res) => {
+  const id = Number(req.params.id);
+  const target = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+  if (!target) throw new HttpError(404, 'User not found');
+  if (target.id === req.user.id) throw new HttpError(400, 'You cannot delete your own account');
+  if (target.role === 'admin') throw new HttpError(400, 'Remove the admin role before deleting this account');
+
+  const covers = db.prepare('SELECT cover_image FROM posts WHERE author_id = ?').all(id);
+
+  db.transaction(() => {
+    db.prepare('DELETE FROM posts WHERE author_id = ?').run(id);
+    db.prepare('DELETE FROM verification_codes WHERE email = ?').run(target.email);
+    db.prepare('DELETE FROM users WHERE id = ?').run(id);
+  })();
+
+  // Remove the uploaded images only after the database changes succeed
+  covers.forEach((row) => removeUpload(row.cover_image));
   res.json({ ok: true });
 });
 

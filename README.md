@@ -15,7 +15,7 @@ opentale-hostinger/
 └── src/
     ├── config.js             All settings from environment variables
     ├── db.js                 SQLite database (persistent file) and tables
-    ├── seed.js               Admin account and demo posts
+    ├── seed.js               Admin account (only when ADMIN_EMAIL and ADMIN_PASSWORD are set)
     ├── routes/
     │   ├── index.js          Unified routing: mounts every API router
     │   ├── auth.js           /api/auth/*   register, verify, login, logout, me
@@ -57,7 +57,7 @@ At minimum set:
 | `NODE_ENV` | `production` |
 | `JWT_SECRET` | a long random text (required, the server refuses to start without it) |
 | `ADMIN_EMAIL` | your admin email |
-| `ADMIN_PASSWORD` | a strong password |
+| `ADMIN_PASSWORD` | a strong password (required to create the admin account) |
 | `COOKIE_SECURE` | `true` (after SSL is active) |
 | `DB_FILE` | `/home/<your-user>/opentale-data/opentale.db` |
 | `UPLOAD_DIR` | `/home/<your-user>/opentale-data/uploads` |
@@ -69,7 +69,11 @@ At minimum set:
 2. Click **Restart** (or **Start**).
 3. Open your domain. The login page is at `/login.html`.
 
-On the first start the admin account is created and six demo posts are added.
+On the first start the admin account is created from `ADMIN_EMAIL` and `ADMIN_PASSWORD`. No demo accounts or posts are created.
+
+**Clean URLs:** posts open at `https://yourdomain.com/your-post-slug`. Old `post.html?slug=` and `post.html?id=` links redirect there automatically.
+
+**Deleting users:** in the admin dashboard, click **Delete** next to a user. This removes their account, posts, and uploaded images permanently. Admin accounts must be demoted first, and you cannot delete your own account.
 
 ## Local testing (optional)
 
