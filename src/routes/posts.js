@@ -115,7 +115,7 @@ router.post('/', authenticate, requireVerified, imageUpload.single('cover'), asy
     }
 
     const slug = `${slugify(fields.title)}-${Date.now().toString(36)}`;
-    const cover = req.file ? uploadUrl(req.file) : '';
+    const cover = req.file ? await uploadUrl(req.file) : '';
     await db.run(
       `INSERT INTO posts (title, slug, excerpt, content, category, tags, cover_image, read_time, author_id)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -140,7 +140,7 @@ router.put('/:id', authenticate, requireVerified, imageUpload.single('cover'), a
     // Keep the old image unless a new one was uploaded
     let cover = post.cover_image;
     if (req.file) {
-      cover = uploadUrl(req.file);
+      cover = await uploadUrl(req.file);
       removeUpload(post.cover_image);
     }
 

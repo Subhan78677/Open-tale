@@ -1,21 +1,46 @@
 const multer = require('multer');
-const crypto = require('crypto');
-const fs = require('fs');
-const path = require('path');
+const cloudinary = require('cloudinary').v2;
 const config = require('../config');
 const { HttpError } = require('../utils/errors');
 
-fs.mkdirSync(config.UPLOAD_DIR, { recursive: true });
+const MIME_EXT = {
+  'image/jpeg': '.jpg',
+  'image/png': '.png',
+  'image/webp': '.webp',
+  'image/gif': '.gif',
+};
 
-const MIME_EXT = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp', 'image/gif': '.gif' };
+let cloudinaryConfigured = false;
+
+function ensureCloudinary() {
+  if (cloudinaryConfigured) return;
+
+  if (process.env.CLOUDINARY_URL) {
+    cloudinary.config({ secure: true });
+    cloudinaryConfigured = true;
+    return;
+  }
+
+  const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+  const apiKey = process.env.CLOUDINARY_API_KEY;
+  const apiSecret = process.env.CLOUDINARY_API_SECRET;
+
+  if (!cloudName || !apiKey || !apiSecret) {
+    throw new HttpError(500, 'Cloudinary environment variables are missing');
+  }
+
+  cloudinary.config({
+    cloud_name: cloudName,
+    api_key: apiKey,
+    api_secret: apiSecret,
+    secure: true,
+  });
+
+  cloudinaryConfigured = true;
+}
 
 const imageUpload = multer({
-  storage: multer.diskStorage({
-    destination: config.UPLOAD_DIR,
-    // The file name is random and the extension comes from the file type, not the file name
-    filename: (req, file, cb) =>
-      cb(null, `${Date.now()}-${crypto.randomBytes(6).toString('hex')}${MIME_EXT[file.mimetype]}`),
-  }),
+  storage: multer.memoryStorage(),
   limits: { fileSize: config.MAX_UPLOAD_BYTES, files: 1 },
   fileFilter: (req, file, cb) => {
     if (MIME_EXT[file.mimetype]) return cb(null, true);
@@ -23,19 +48,49 @@ const imageUpload = multer({
   },
 });
 
-// Public URL for a saved upload, e.g. /uploads/1700000000-abc.jpg
-const uploadUrl = (file) => `/uploads/${file.filename}`;
+// Uploads a Multer memory file to Cloudinary and returns its permanent secure URL
+async function uploadUrl(file) {
+  if (!file || !file.buffer) {
+    throw new HttpError(400, 'No image file provided');
+  }
 
-// Deletes an upload from disk if it was saved by this app
+  ensureCloudinary();
+
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      {
+        folder: 'opentale/posts',
+        resource_type: 'image',
+      },
+      (err, result) => {
+        if (err || !result || !result.secure_url) {
+          return reject(err || new HttpError(500, 'Failed to upload image to Cloudinary'));
+        }
+        resolve(result.secure_url);
+      }
+    );
+
+    stream.end(file.buffer);
+  });
+}
+
+// Deletes a Cloudinary image if public_id can be extracted; safely ignores legacy /uploads/ paths
 function removeUpload(url) {
-  if (url && url.startsWith('/uploads/')) {
-    fs.unlink(path.join(config.UPLOAD_DIR, path.basename(url)), () => {});
+  if (!url || typeof url !== 'string') return;
+  if (!url.includes('res.cloudinary.com')) return;
+
+  try {
+    ensureCloudinary();
+    const match = url.match(/\/upload\/(?:v\d+\/)?(.+?)\.[a-zA-Z0-9]+(?:\?.*)?$/);
+    if (match && match[1]) {
+      cloudinary.uploader.destroy(match[1], () => {});
+    }
+  } catch (_) {
+    // Ignore cleanup failures
   }
 }
 
-// Deletes a file that was uploaded during a request that then failed
-function discardUpload(req) {
-  if (req.file) fs.unlink(req.file.path, () => {});
-}
+// Nothing on disk to clean up when using memoryStorage
+function discardUpload() {}
 
 module.exports = { imageUpload, uploadUrl, removeUpload, discardUpload };

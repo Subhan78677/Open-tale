@@ -25,10 +25,11 @@ router.get('/profile', authenticate, asyncHandler(async (req, res) => {
 }));
 
 // POST /api/upload  (image for the rich text editor)
-router.post('/upload', authenticate, requireVerified, imageUpload.single('image'), (req, res) => {
+router.post('/upload', authenticate, requireVerified, imageUpload.single('image'), asyncHandler(async (req, res) => {
   if (!req.file) throw new HttpError(400, 'No image received');
-  res.json({ url: uploadUrl(req.file) });
-});
+  const url = await uploadUrl(req.file);
+  res.json({ url });
+}));
 
 // GET /api/categories
 router.get('/categories', asyncHandler(async (req, res) => {
