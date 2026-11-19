@@ -50,12 +50,11 @@ app.get('/sitemap.xml', asyncHandler(async (req, res) => {
   let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
   xml += `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n`;
 
-  const staticPages = [
-    { url: '', priority: '1.0', changefreq: 'daily' },
-    { url: '/blog.html', priority: '0.8', changefreq: 'weekly' },
-    { url: '/login.html', priority: '0.3', changefreq: 'monthly' },
-    { url: '/write.html', priority: '0.5', changefreq: 'monthly' },
-  ];
+ const staticPages = [
+  { url: '', priority: '1.0', changefreq: 'daily' },
+  { url: '/blog.html', priority: '0.8', changefreq: 'weekly' },
+];
+
   staticPages.forEach((p) => {
     xml += `  <url>\n    <loc>https://opentale.blog${p.url}</loc>\n    <changefreq>${p.changefreq}</changefreq>\n    <priority>${p.priority}</priority>\n  </url>\n`;
   });
