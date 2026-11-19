@@ -94,18 +94,37 @@ app.use((req, res) => {
 // Errors from any route end here
 app.use(errorHandler);
 
-// Start only after the tables and default settings exist
-async function start() {
-  await db.init();
-  await seed();
+let dbReadyPromise = null;
 
-  const PORT = process.env.PORT || config.PORT || 3000;
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Open Tale is running on port ${PORT}`);
-  });
+function ensureDbReady() {
+  if (!dbReadyPromise) {
+    dbReadyPromise = (async () => {
+      await db.init();
+      await seed();
+    })().catch((err) => {
+      dbReadyPromise = null;
+      throw err;
+    });
+  }
+  return dbReadyPromise;
 }
 
-start().catch((err) => {
-  console.error('Could not start Open Tale:', err.message);
-  process.exit(1);
+// Wait until DB tables and seed data are ready before handling requests
+app.use(async (req, res, next) => {
+  try {
+    await ensureDbReady();
+    next();
+  } catch (err) {
+    next(err);
+  }
+});
+
+const PORT = process.env.PORT || config.PORT || 3000;
+const server = app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Open Tale is running on port ${PORT}`);
+});
+
+ensureDbReady().catch((err) => {
+  console.error('Could not initialize Open Tale database:', err.message);
+  server.close(() => process.exit(1));
 });
