@@ -21,6 +21,93 @@ const { mountRoutes } = require('./src/routes');
 const { errorHandler } = require('./src/middleware/errors');
 const { asyncHandler } = require('./src/utils/errors');
 
+const SITE_URL = 'https://opentale.blog';
+const DEFAULT_IMAGE = `${SITE_URL}/assets/favicon.png`;
+const postTemplateCache = fs.readFileSync(path.join(config.PUBLIC_DIR, 'post.html'), 'utf8');
+
+function escapeHtml(value = '') {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function escapeJsonLd(obj) {
+  return JSON.stringify(obj).replace(/</g, '\\u003c');
+}
+
+function stripMarkdownAndHtml(text = '') {
+  return String(text)
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/[#*_`>~-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function resolveAbsoluteUrl(url) {
+  if (!url) return DEFAULT_IMAGE;
+  if (/^https?:\/\//i.test(url)) return url;
+  return `${SITE_URL}${url.startsWith('/') ? '' : '/'}${url}`;
+}
+
+function buildPostHeadInjection(post, slug) {
+  const canonicalUrl = `${SITE_URL}/${encodeURIComponent(slug)}`;
+  const titleText = `${post.title} – Open Tale`;
+  const rawDesc = post.excerpt || stripMarkdownAndHtml(post.content);
+  const descriptionText = (rawDesc || `Read ${post.title} on Open Tale.`).slice(0, 160);
+  const imageUrl = resolveAbsoluteUrl(post.cover_image);
+  const authorName = post.author_name || 'Open Tale';
+  const publishedIso = post.created_at ? new Date(post.created_at).toISOString() : undefined;
+  const modifiedIso = post.updated_at
+    ? new Date(post.updated_at).toISOString()
+    : publishedIso;
+
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'BlogPosting',
+    mainEntityOfPage: {
+      '@type': 'WebPage',
+      '@id': canonicalUrl,
+    },
+    headline: post.title,
+    description: descriptionText,
+    image: [imageUrl],
+    author: {
+      '@type': 'Person',
+      name: authorName,
+    },
+    publisher: {
+      '@type': 'Organization',
+      name: 'Open Tale',
+      logo: {
+        '@type': 'ImageObject',
+        url: DEFAULT_IMAGE,
+      },
+    },
+    ...(publishedIso ? { datePublished: publishedIso } : {}),
+    ...(modifiedIso ? { dateModified: modifiedIso } : {}),
+  };
+
+  return [
+    `<title>${escapeHtml(titleText)}</title>`,
+    `<link rel="canonical" href="${escapeHtml(canonicalUrl)}">`,
+    `<meta name="description" content="${escapeHtml(descriptionText)}">`,
+    `<meta property="og:type" content="article">`,
+    `<meta property="og:site_name" content="Open Tale">`,
+    `<meta property="og:title" content="${escapeHtml(post.title)}">`,
+    `<meta property="og:description" content="${escapeHtml(descriptionText)}">`,
+    `<meta property="og:url" content="${escapeHtml(canonicalUrl)}">`,
+    `<meta property="og:image" content="${escapeHtml(imageUrl)}">`,
+    `<meta name="twitter:card" content="summary_large_image">`,
+    `<meta name="twitter:title" content="${escapeHtml(post.title)}">`,
+    `<meta name="twitter:description" content="${escapeHtml(descriptionText)}">`,
+    `<meta name="twitter:image" content="${escapeHtml(imageUrl)}">`,
+    `<script type="application/ld+json">${escapeJsonLd(jsonLd)}</script>`,
+  ].join('\n  ');
+}
+
 const app = express();
 app.disable('x-powered-by');
 app.set('trust proxy', 1); // Hostinger puts the site behind a proxy
@@ -50,10 +137,10 @@ app.get('/sitemap.xml', asyncHandler(async (req, res) => {
   let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
   xml += `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n`;
 
- const staticPages = [
-  { url: '', priority: '1.0', changefreq: 'daily' },
-  { url: '/blog.html', priority: '0.8', changefreq: 'weekly' },
-];
+  const staticPages = [
+    { url: '', priority: '1.0', changefreq: 'daily' },
+    { url: '/blog.html', priority: '0.8', changefreq: 'weekly' },
+  ];
 
   staticPages.forEach((p) => {
     xml += `  <url>\n    <loc>https://opentale.blog${p.url}</loc>\n    <changefreq>${p.changefreq}</changefreq>\n    <priority>${p.priority}</priority>\n  </url>\n`;
@@ -71,14 +158,25 @@ app.get('/sitemap.xml', asyncHandler(async (req, res) => {
 // API routes
 mountRoutes(app);
 
-// Clean URLs: /my-post-slug shows a post, /blog shows blog.html, etc.
-// Runs after the API routes, so it never catches /api/... addresses.
+// Clean URLs: /my-post-slug shows a post with SSR SEO + JSON-LD, /blog shows blog.html, etc.
 app.get('/:slug', asyncHandler(async (req, res, next) => {
   const slug = req.params.slug;
   if (!/^[a-z0-9-]+$/i.test(slug)) return next();
 
-  const post = await db.get('SELECT id FROM posts WHERE slug = ?', [slug]);
-  if (post) return res.sendFile(path.join(config.PUBLIC_DIR, 'post.html'));
+  const post = await db.get(
+    `SELECT p.id, p.slug, p.title, p.excerpt, p.content, p.cover_image, p.created_at, p.updated_at,
+            u.name AS author_name
+     FROM posts p
+     LEFT JOIN users u ON u.id = p.author_id
+     WHERE p.slug = ?`,
+    [slug]
+  );
+
+  if (post) {
+    const headInjection = buildPostHeadInjection(post, slug);
+    const html = postTemplateCache.replace(/<title>.*?<\/title>/s, headInjection);
+    return res.type('html').send(html);
+  }
 
   const page = path.join(config.PUBLIC_DIR, `${slug}.html`);
   if (fs.existsSync(page)) return res.sendFile(page);
